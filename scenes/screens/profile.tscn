@@ -1,0 +1,67 @@
+[gd_scene load_steps=5 format=3]
+
+[ext_resource type="Script" path="res://src/ui/screens/profile.gd" id="1_pf"]
+[ext_resource type="PackedScene" path="res://scenes/components/top_bar.tscn" id="2_tb"]
+[ext_resource type="PackedScene" path="res://scenes/components/player_profile.tscn" id="3_pp"]
+[ext_resource type="PackedScene" path="res://scenes/components/card.tscn" id="4_card"]
+
+[node name="Profile" type="Control"]
+anchor_right = 1.0
+anchor_bottom = 1.0
+grow_horizontal = 2
+grow_vertical = 2
+script = ExtResource("1_pf")
+
+[node name="Margin" type="MarginContainer" parent="."]
+anchor_right = 1.0
+anchor_bottom = 1.0
+grow_horizontal = 2
+grow_vertical = 2
+theme_override_constants/margin_left = 24
+theme_override_constants/margin_top = 20
+theme_override_constants/margin_right = 24
+theme_override_constants/margin_bottom = 24
+
+[node name="Content" type="VBoxContainer" parent="Margin"]
+theme_override_constants/separation = 16
+
+[node name="TopBar" parent="Margin/Content" instance=ExtResource("2_tb")]
+title = "Profile"
+show_back = true
+show_coins = true
+
+[node name="ProfileCenter" type="CenterContainer" parent="Margin/Content"]
+custom_minimum_size = Vector2(0, 24)
+
+[node name="ProfileDisplay" parent="Margin/Content/ProfileCenter" instance=ExtResource("3_pp")]
+avatar_size = 72
+
+[node name="StatsTitle" type="Label" parent="Margin/Content"]
+theme_type_variation = "Heading"
+text = "Statistics"
+
+[node name="StatsRow" type="HBoxContainer" parent="Margin/Content"]
+theme_override_constants/separation = 12
+
+[node name="MatchesCard" parent="Margin/Content/StatsRow" instance=ExtResource("4_card")]
+size_flags_horizontal = 3
+title_text = "Matches"
+value_text = "0"
+
+[node name="WinsCard" parent="Margin/Content/StatsRow" instance=ExtResource("4_card")]
+size_flags_horizontal = 3
+title_text = "Wins"
+value_text = "0"
+
+[node name="WinRateCard" parent="Margin/Content/StatsRow" instance=ExtResource("4_card")]
+size_flags_horizontal = 3
+title_text = "Win rate"
+value_text = "—"
+
+[node name="HintLabel" type="Label" parent="Margin/Content"]
+theme_type_variation = "Caption"
+autowrap_mode = 3
+text = "Stats update automatically once your account connects to the server."
+
+[node name="Spacer" type="Control" parent="Margin/Content"]
+size_flags_vertical = 3

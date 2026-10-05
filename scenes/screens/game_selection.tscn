@@ -1,0 +1,52 @@
+[gd_scene load_steps=4 format=3]
+
+[ext_resource type="Script" path="res://src/ui/screens/game_selection.gd" id="1_gs"]
+[ext_resource type="PackedScene" path="res://scenes/components/top_bar.tscn" id="2_tb"]
+[ext_resource type="PackedScene" path="res://scenes/components/card.tscn" id="3_card"]
+
+[node name="GameSelection" type="Control"]
+anchor_right = 1.0
+anchor_bottom = 1.0
+grow_horizontal = 2
+grow_vertical = 2
+script = ExtResource("1_gs")
+
+[node name="Margin" type="MarginContainer" parent="."]
+anchor_right = 1.0
+anchor_bottom = 1.0
+grow_horizontal = 2
+grow_vertical = 2
+theme_override_constants/margin_left = 24
+theme_override_constants/margin_top = 20
+theme_override_constants/margin_right = 24
+theme_override_constants/margin_bottom = 24
+
+[node name="Content" type="VBoxContainer" parent="Margin"]
+theme_override_constants/separation = 16
+
+[node name="TopBar" parent="Margin/Content" instance=ExtResource("2_tb")]
+title = "Select Game"
+show_back = true
+show_coins = true
+
+[node name="SubtitleLabel" type="Label" parent="Margin/Content"]
+theme_type_variation = "Caption"
+text = "Pick a game to play. All titles arrive in a later phase."
+
+[node name="AaduPuliCard" parent="Margin/Content" instance=ExtResource("3_card")]
+title_text = "Aadu Puli Aattam"
+subtitle_text = "Asymmetric hunt game · 2 players"
+badge_text = "Coming soon"
+
+[node name="SolahSeediCard" parent="Margin/Content" instance=ExtResource("3_card")]
+title_text = "Solah Seedi"
+subtitle_text = "16 Soldiers · classic war game"
+badge_text = "Coming soon"
+
+[node name="MorrisCard" parent="Margin/Content" instance=ExtResource("3_card")]
+title_text = "Nine Men's Morris"
+subtitle_text = "Mill game · three phases"
+badge_text = "Coming soon"
+
+[node name="Spacer" type="Control" parent="Margin/Content"]
+size_flags_vertical = 3

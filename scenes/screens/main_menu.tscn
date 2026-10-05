@@ -1,0 +1,62 @@
+[gd_scene load_steps=5 format=3]
+
+[ext_resource type="Script" path="res://src/ui/screens/main_menu.gd" id="1_mm"]
+[ext_resource type="PackedScene" path="res://scenes/components/top_bar.tscn" id="2_tb"]
+[ext_resource type="PackedScene" path="res://scenes/components/button.tscn" id="3_btn"]
+[ext_resource type="PackedScene" path="res://scenes/components/player_profile.tscn" id="4_pp"]
+
+[node name="MainMenu" type="Control"]
+anchor_right = 1.0
+anchor_bottom = 1.0
+grow_horizontal = 2
+grow_vertical = 2
+script = ExtResource("1_mm")
+
+[node name="Margin" type="MarginContainer" parent="."]
+anchor_right = 1.0
+anchor_bottom = 1.0
+grow_horizontal = 2
+grow_vertical = 2
+theme_override_constants/margin_left = 24
+theme_override_constants/margin_top = 20
+theme_override_constants/margin_right = 24
+theme_override_constants/margin_bottom = 24
+
+[node name="Content" type="VBoxContainer" parent="Margin"]
+theme_override_constants/separation = 16
+
+[node name="TopBar" parent="Margin/Content" instance=ExtResource("2_tb")]
+title = "AATAMGT"
+show_coins = true
+
+[node name="SpacerTop" type="Control" parent="Margin/Content"]
+custom_minimum_size = Vector2(0, 8)
+size_flags_vertical = 3
+
+[node name="ProfileCenter" type="CenterContainer" parent="Margin/Content"]
+
+[node name="Profile" parent="Margin/Content/ProfileCenter" instance=ExtResource("4_pp")]
+
+[node name="Gap" type="Control" parent="Margin/Content"]
+custom_minimum_size = Vector2(0, 40)
+
+[node name="PlayButton" parent="Margin/Content" instance=ExtResource("3_btn")]
+custom_minimum_size = Vector2(0, 64)
+variant = 0
+text = "PLAY"
+
+[node name="ProfileButton" parent="Margin/Content" instance=ExtResource("3_btn")]
+variant = 1
+text = "Profile"
+
+[node name="SettingsButton" parent="Margin/Content" instance=ExtResource("3_btn")]
+variant = 1
+text = "Settings"
+
+[node name="SpacerBottom" type="Control" parent="Margin/Content"]
+size_flags_vertical = 3
+
+[node name="VersionLabel" type="Label" parent="Margin/Content"]
+theme_type_variation = "Caption"
+text = "v0.1.0"
+horizontal_alignment = 1

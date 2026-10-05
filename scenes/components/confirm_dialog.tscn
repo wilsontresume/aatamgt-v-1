@@ -1,0 +1,57 @@
+[gd_scene load_steps=3 format=3]
+
+[ext_resource type="Script" path="res://src/ui/components/ui_confirm_dialog.gd" id="1_cd"]
+[ext_resource type="PackedScene" path="res://scenes/components/button.tscn" id="2_btn"]
+
+[node name="UiConfirmDialog" type="Control"]
+visible = false
+anchor_right = 1.0
+anchor_bottom = 1.0
+grow_horizontal = 2
+grow_vertical = 2
+script = ExtResource("1_cd")
+
+[node name="Dim" type="ColorRect" parent="."]
+anchor_right = 1.0
+anchor_bottom = 1.0
+grow_horizontal = 2
+grow_vertical = 2
+color = Color(0, 0, 0, 0.62)
+
+[node name="Center" type="VBoxContainer" parent="."]
+anchor_right = 1.0
+anchor_bottom = 1.0
+grow_horizontal = 2
+grow_vertical = 2
+alignment = 1
+
+[node name="Panel" type="PanelContainer" parent="Center"]
+custom_minimum_size = Vector2(500, 0)
+size_flags_horizontal = 4
+theme_type_variation = "Dialog"
+
+[node name="Body" type="VBoxContainer" parent="Center/Panel"]
+theme_override_constants/separation = 16
+
+[node name="TitleLabel" type="Label" parent="Center/Panel/Body"]
+theme_type_variation = "Heading"
+autowrap_mode = 3
+text = "Confirm"
+
+[node name="MessageLabel" type="Label" parent="Center/Panel/Body"]
+theme_type_variation = "Body"
+autowrap_mode = 3
+text = ""
+
+[node name="Buttons" type="HBoxContainer" parent="Center/Panel/Body"]
+theme_override_constants/separation = 12
+
+[node name="CancelButton" parent="Center/Panel/Body/Buttons" instance=ExtResource("2_btn")]
+size_flags_horizontal = 3
+text = "Cancel"
+variant = 1
+
+[node name="ConfirmButton" parent="Center/Panel/Body/Buttons" instance=ExtResource("2_btn")]
+size_flags_horizontal = 3
+text = "Confirm"
+variant = 0

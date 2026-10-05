@@ -1,0 +1,20 @@
+[gd_scene load_steps=3 format=3]
+
+[ext_resource type="Script" path="res://src/ui/components/ui_coin_balance.gd" id="1_cb"]
+[ext_resource type="Script" path="res://src/ui/components/ui_coin_icon.gd" id="2_icon"]
+
+[node name="CoinBalance" type="HBoxContainer"]
+theme_override_constants/separation = 6
+size_flags_vertical = 4
+script = ExtResource("1_cb")
+
+[node name="CoinIcon" type="Control" parent="."]
+custom_minimum_size = Vector2(24, 24)
+size_flags_vertical = 4
+mouse_filter = 2
+script = ExtResource("2_icon")
+
+[node name="AmountLabel" type="Label" parent="."]
+theme_type_variation = "Body"
+text = "0"
+size_flags_vertical = 4

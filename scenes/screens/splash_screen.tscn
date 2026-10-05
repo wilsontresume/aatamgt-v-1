@@ -1,0 +1,41 @@
+[gd_scene load_steps=4 format=3]
+
+[ext_resource type="Script" path="res://src/ui/screens/splash_screen.gd" id="1_splash"]
+[ext_resource type="Texture2D" path="res://icon.svg" id="2_icon"]
+[ext_resource type="PackedScene" path="res://scenes/components/loading_indicator.tscn" id="3_load"]
+
+[node name="SplashScreen" type="Control"]
+anchor_right = 1.0
+anchor_bottom = 1.0
+grow_horizontal = 2
+grow_vertical = 2
+script = ExtResource("1_splash")
+
+[node name="Center" type="CenterContainer" parent="."]
+anchor_right = 1.0
+anchor_bottom = 1.0
+grow_horizontal = 2
+grow_vertical = 2
+
+[node name="Content" type="VBoxContainer" parent="Center"]
+theme_override_constants/separation = 24
+
+[node name="Logo" type="TextureRect" parent="Center/Content"]
+custom_minimum_size = Vector2(150, 150)
+size_flags_horizontal = 4
+texture = ExtResource("2_icon")
+expand_mode = 1
+stretch_mode = 5
+
+[node name="AppName" type="Label" parent="Center/Content"]
+theme_type_variation = "TitleLarge"
+text = "AATAMGT"
+horizontal_alignment = 1
+
+[node name="Tagline" type="Label" parent="Center/Content"]
+theme_type_variation = "Caption"
+text = "Indian Strategy Games"
+horizontal_alignment = 1
+
+[node name="Loading" parent="Center/Content" instance=ExtResource("3_load")]
+size_flags_horizontal = 4

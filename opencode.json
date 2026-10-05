@@ -1,0 +1,15 @@
+{
+  "$schema": "https://opencode.ai/config.json",
+  "mcp": {
+    "godot": {
+      "type": "local",
+      "command": ["/opt/homebrew/bin/uvx", "godot-editor-mcp"],
+      "enabled": true,
+      "environment": {
+        "GODOT_MCP_GODOT_BIN": "/Applications/Godot.app/Contents/MacOS/Godot",
+        "GODOT_MCP_PROJECT_DIR": "/Volumes/Calcronio/Gaming/aatamgt-v-1",
+        "GODOT_MCP_DEFAULT_TOOLSETS": "scene_edit,scripts,resources_edit,project,editor,physics,animation,scene_3d,particles,navigation,audio,tilemap,theme_ui,shader,visual_shader,runtime,input,input_map,batch,analysis,export,debugger,asset_import,composite,profiling"
+      }
+    }
+  }
+}

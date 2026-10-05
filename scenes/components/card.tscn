@@ -1,0 +1,35 @@
+[gd_scene load_steps=2 format=3]
+
+[ext_resource type="Script" path="res://src/ui/components/ui_card.gd" id="1_card"]
+
+[node name="UiCard" type="PanelContainer"]
+theme_type_variation = "Card"
+script = ExtResource("1_card")
+
+[node name="Body" type="VBoxContainer" parent="."]
+theme_override_constants/separation = 6
+
+[node name="TitleLabel" type="Label" parent="Body"]
+theme_type_variation = "Heading"
+visible = false
+text = "Title"
+
+[node name="SubtitleLabel" type="Label" parent="Body"]
+theme_type_variation = "Caption"
+visible = false
+text = "Subtitle"
+
+[node name="ValueLabel" type="Label" parent="Body"]
+theme_type_variation = "ValueBig"
+visible = false
+text = "0"
+
+[node name="Badge" type="PanelContainer" parent="Body"]
+theme_type_variation = "Badge"
+visible = false
+size_flags_horizontal = 0
+
+[node name="BadgeLabel" type="Label" parent="Body/Badge"]
+theme_type_variation = "Caption"
+theme_override_colors/font_color = Color(0.91, 0.706, 0.29, 1)
+text = "Badge"

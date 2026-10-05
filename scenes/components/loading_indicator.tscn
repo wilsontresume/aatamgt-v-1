@@ -1,0 +1,21 @@
+[gd_scene load_steps=3 format=3]
+
+[ext_resource type="Script" path="res://src/ui/components/ui_loading_indicator.gd" id="1_li"]
+[ext_resource type="Script" path="res://src/ui/components/ui_spinner.gd" id="2_sp"]
+
+[node name="LoadingIndicator" type="VBoxContainer"]
+theme_override_constants/separation = 12
+alignment = 1
+mouse_filter = 2
+script = ExtResource("1_li")
+
+[node name="Spinner" type="Control" parent="."]
+custom_minimum_size = Vector2(64, 64)
+size_flags_horizontal = 4
+mouse_filter = 2
+script = ExtResource("2_sp")
+
+[node name="TextLabel" type="Label" parent="."]
+theme_type_variation = "Caption"
+text = "Loading"
+horizontal_alignment = 1

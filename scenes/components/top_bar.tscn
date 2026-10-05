@@ -1,0 +1,30 @@
+[gd_scene load_steps=4 format=3]
+
+[ext_resource type="Script" path="res://src/ui/components/ui_top_bar.gd" id="1_tb"]
+[ext_resource type="PackedScene" path="res://scenes/components/button.tscn" id="2_btn"]
+[ext_resource type="PackedScene" path="res://scenes/components/coin_balance.tscn" id="3_coin"]
+
+[node name="UiTopBar" type="HBoxContainer"]
+custom_minimum_size = Vector2(0, 64)
+theme_override_constants/separation = 8
+script = ExtResource("1_tb")
+
+[node name="BackButton" parent="." instance=ExtResource("2_btn")]
+custom_minimum_size = Vector2(112, 48)
+size_flags_vertical = 4
+variant = 2
+visible = false
+text = "‹  Back"
+
+[node name="TitleLabel" type="Label" parent="."]
+theme_type_variation = "ScreenTitle"
+text = "Title"
+horizontal_alignment = 1
+size_flags_horizontal = 3
+size_flags_vertical = 4
+
+[node name="ActionsSlot" type="HBoxContainer" parent="."]
+theme_override_constants/separation = 8
+size_flags_vertical = 4
+
+[node name="CoinBalance" parent="ActionsSlot" instance=ExtResource("3_coin")]

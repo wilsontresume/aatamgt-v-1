@@ -1,0 +1,350 @@
+// AATAMGT platform schema — Phase 2 (common platform, no game rules).
+// MySQL 8 / MariaDB compatible. All identifiers are quoted by Prisma.
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "mysql"
+  url      = env("DATABASE_URL")
+}
+
+// ---------------------------------------------------------------------------
+// Identity
+// ---------------------------------------------------------------------------
+
+enum Role {
+  USER
+  MODERATOR
+  ADMIN
+}
+
+enum UserStatus {
+  ACTIVE
+  SUSPENDED
+  BANNED
+}
+
+model User {
+  id            String     @id @default(cuid())
+  email         String?    @unique
+  username      String     @unique
+  passwordHash  String
+  role          Role       @default(USER)
+  status        UserStatus @default(ACTIVE)
+  emailVerified Boolean    @default(false)
+  lastLoginAt   DateTime?
+  deletedAt     DateTime?
+  createdAt     DateTime   @default(now())
+  updatedAt     DateTime   @updatedAt
+
+  profile         Profile?
+  wallets         Wallet[]
+  refreshTokens   RefreshToken[]
+  matchPlayers    MatchPlayer[]
+  matchMoves      MatchMove[]
+  dailyRewards    DailyReward[]
+  notifications   Notification[]
+  friendshipsSent Friendship[]   @relation("friend_requester")
+  friendshipsGot  Friendship[]   @relation("friend_addressee")
+  leaderboardRows LeaderboardEntry[]
+  auditLogs       AdminAuditLog[]
+
+  @@index([status])
+  @@index([createdAt])
+}
+
+model Profile {
+  id          String   @id @default(cuid())
+  userId      String   @unique
+  displayName String
+  avatarKey   String   @default("default")
+  countryCode String?  @db.VarChar(2)
+  bio         String?  @db.Text
+  level       Int      @default(1)
+  xp          Int      @default(0)
+  rating      Int      @default(1000)
+  wins        Int      @default(0)
+  losses      Int      @default(0)
+  draws       Int      @default(0)
+  gamesPlayed Int      @default(0)
+  isPublic    Boolean  @default(true)
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+}
+
+// ---------------------------------------------------------------------------
+// Economy
+// ---------------------------------------------------------------------------
+
+enum WalletTxType {
+  DEPOSIT
+  WAGER
+  PAYOUT
+  DAILY_REWARD
+  BONUS
+  REFUND
+  ADMIN_ADJUSTMENT
+}
+
+model Wallet {
+  id            String   @id @default(cuid())
+  userId        String
+  currency      String   @default("COIN") @db.VarChar(8)
+  balance       Int      @default(0)
+  lockedBalance Int      @default(0)
+  version       Int      @default(0)
+  createdAt     DateTime @default(now())
+  updatedAt     DateTime @updatedAt
+
+  user         User              @relation(fields: [userId], references: [id], onDelete: Cascade)
+  transactions WalletTransaction[]
+
+  @@unique([userId, currency])
+  @@index([balance])
+}
+
+model WalletTransaction {
+  id             String        @id @default(cuid())
+  walletId       String
+  amount         Int
+  balanceAfter   Int
+  type           WalletTxType
+  refType        String?       @db.VarChar(64)
+  refId          String?       @db.VarChar(64)
+  idempotencyKey String?       @unique
+  memo           String?       @db.VarChar(255)
+  createdAt      DateTime      @default(now())
+
+  wallet Wallet @relation(fields: [walletId], references: [id], onDelete: Cascade)
+
+  @@index([walletId, createdAt])
+  @@index([type, createdAt])
+}
+
+// ---------------------------------------------------------------------------
+// Catalog
+// ---------------------------------------------------------------------------
+
+enum GameStatus {
+  ACTIVE
+  MAINTENANCE
+  DISABLED
+}
+
+model Game {
+  id                     String     @id @default(cuid())
+  key                    String     @unique
+  name                   String
+  slug                   String     @unique
+  description            String?    @db.Text
+  minPlayers             Int        @default(2)
+  maxPlayers             Int        @default(2)
+  status                 GameStatus @default(ACTIVE)
+  rulesVersion           Int        @default(1)
+  requiresAuthoritativeState Boolean @default(true)
+  config                 Json?
+  createdAt              DateTime   @default(now())
+  updatedAt              DateTime   @updatedAt
+
+  matches GameMatch[]
+}
+
+// ---------------------------------------------------------------------------
+// Matches (server-authoritative envelope; no rules engine yet)
+// ---------------------------------------------------------------------------
+
+enum MatchStatus {
+  PENDING
+  ACTIVE
+  PAUSED
+  COMPLETED
+  ABANDONED
+  CANCELLED
+}
+
+enum MatchMode {
+  CASUAL
+  RANKED
+  PRIVATE
+}
+
+enum MatchResult {
+  PENDING
+  WIN
+  LOSS
+  DRAW
+  ABANDONED
+}
+
+model GameMatch {
+  id           String      @id @default(cuid())
+  gameId       String
+  gameKey      String
+  status       MatchStatus @default(PENDING)
+  mode         MatchMode   @default(CASUAL)
+  stakeCoins   Int         @default(0)
+  stateVersion Int         @default(0)
+  serverState  Json?
+  createdByUserId String?
+  startedAt    DateTime?
+  completedAt  DateTime?
+  createdAt    DateTime    @default(now())
+  updatedAt    DateTime    @updatedAt
+
+  game    Game          @relation(fields: [gameId], references: [id])
+  players MatchPlayer[]
+  moves   MatchMove[]
+
+  @@index([gameKey, status])
+  @@index([status, createdAt])
+  @@index([createdByUserId])
+}
+
+model MatchPlayer {
+  id        String      @id @default(cuid())
+  matchId   String
+  userId    String
+  seat      Int
+  color     String?     @db.VarChar(32)
+  team      Int?
+  result    MatchResult @default(PENDING)
+  score     Int         @default(0)
+  joinedAt  DateTime    @default(now())
+  leftAt    DateTime?
+
+  match     GameMatch @relation(fields: [matchId], references: [id], onDelete: Cascade)
+  user      User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+  moves     MatchMove[]
+
+  @@unique([matchId, seat])
+  @@index([userId])
+}
+
+model MatchMove {
+  id             String        @id @default(cuid())
+  matchId        String
+  seq            Int
+  matchPlayerId  String?
+  userId         String
+  payload        Json
+  stateHash      String?       @db.VarChar(64)
+  serverAt       DateTime      @default(now())
+
+  match       GameMatch   @relation(fields: [matchId], references: [id], onDelete: Cascade)
+  matchPlayer MatchPlayer? @relation(fields: [matchPlayerId], references: [id], onDelete: SetNull)
+  user        User        @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@unique([matchId, seq])
+  @@index([userId])
+}
+
+// ---------------------------------------------------------------------------
+// Engagement
+// ---------------------------------------------------------------------------
+
+model DailyReward {
+  id          String   @id @default(cuid())
+  userId      String
+  rewardDate  DateTime @db.Date
+  streakDay   Int
+  rewardCoins Int
+  claimedAt   DateTime @default(now())
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@unique([userId, rewardDate])
+  @@index([userId])
+}
+
+enum FriendStatus {
+  PENDING
+  ACCEPTED
+  DECLINED
+  BLOCKED
+}
+
+model Friendship {
+  id          String       @id @default(cuid())
+  requesterId String
+  addresseeId String
+  status      FriendStatus @default(PENDING)
+  createdAt   DateTime     @default(now())
+  updatedAt   DateTime     @updatedAt
+
+  requester User @relation("friend_requester", fields: [requesterId], references: [id], onDelete: Cascade)
+  addressee User @relation("friend_addressee", fields: [addresseeId], references: [id], onDelete: Cascade)
+
+  @@unique([requesterId, addresseeId])
+  @@index([addresseeId, status])
+}
+
+model Notification {
+  id       String    @id @default(cuid())
+  userId   String
+  type     String    @db.VarChar(64)
+  title    String
+  body     String?   @db.Text
+  data     Json?
+  readAt   DateTime?
+  createdAt DateTime @default(now())
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId, createdAt])
+  @@index([userId, readAt])
+}
+
+enum LeaderboardPeriod {
+  DAILY
+  WEEKLY
+  ALL_TIME
+}
+
+model LeaderboardEntry {
+  id        String            @id @default(cuid())
+  key       String            @db.VarChar(128)
+  userId    String
+  gameKey   String?           @db.VarChar(64)
+  period    LeaderboardPeriod @default(ALL_TIME)
+  score     Int               @default(0)
+  rank      Int               @default(0)
+  updatedAt DateTime          @default(now())
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@unique([key, userId])
+  @@index([key, score])
+}
+
+model RefreshToken {
+  id        String    @id @default(cuid())
+  userId    String
+  tokenHash String    @unique
+  expiresAt DateTime
+  revokedAt DateTime?
+  createdAt DateTime  @default(now())
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId])
+  @@index([expiresAt])
+}
+
+model AdminAuditLog {
+  id           String   @id @default(cuid())
+  actorUserId  String
+  action       String   @db.VarChar(128)
+  targetType   String?  @db.VarChar(64)
+  targetId     String?  @db.VarChar(64)
+  data         Json?
+  createdAt    DateTime @default(now())
+
+  actor User @relation(fields: [actorUserId], references: [id], onDelete: Cascade)
+
+  @@index([actorUserId, createdAt])
+  @@index([action, createdAt])
+}

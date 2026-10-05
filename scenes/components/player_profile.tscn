@@ -1,0 +1,26 @@
+[gd_scene load_steps=3 format=3]
+
+[ext_resource type="Script" path="res://src/ui/components/ui_player_profile.gd" id="1_pp"]
+[ext_resource type="Script" path="res://src/ui/components/ui_avatar.gd" id="2_av"]
+
+[node name="PlayerProfile" type="HBoxContainer"]
+theme_override_constants/separation = 12
+script = ExtResource("1_pp")
+
+[node name="Avatar" type="Control" parent="."]
+custom_minimum_size = Vector2(56, 56)
+size_flags_vertical = 4
+mouse_filter = 2
+script = ExtResource("2_av")
+
+[node name="Info" type="VBoxContainer" parent="."]
+theme_override_constants/separation = 2
+size_flags_vertical = 4
+
+[node name="NameLabel" type="Label" parent="Info"]
+theme_type_variation = "Heading"
+text = "Player"
+
+[node name="TagLabel" type="Label" parent="Info"]
+theme_type_variation = "Caption"
+text = "Guest"

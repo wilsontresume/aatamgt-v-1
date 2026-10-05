@@ -1,0 +1,101 @@
+[gd_scene load_steps=4 format=3]
+
+[ext_resource type="Script" path="res://src/ui/screens/settings.gd" id="1_st"]
+[ext_resource type="PackedScene" path="res://scenes/components/top_bar.tscn" id="2_tb"]
+[ext_resource type="PackedScene" path="res://scenes/components/button.tscn" id="3_btn"]
+
+[node name="Settings" type="Control"]
+anchor_right = 1.0
+anchor_bottom = 1.0
+grow_horizontal = 2
+grow_vertical = 2
+script = ExtResource("1_st")
+
+[node name="Margin" type="MarginContainer" parent="."]
+anchor_right = 1.0
+anchor_bottom = 1.0
+grow_horizontal = 2
+grow_vertical = 2
+theme_override_constants/margin_left = 24
+theme_override_constants/margin_top = 20
+theme_override_constants/margin_right = 24
+theme_override_constants/margin_bottom = 24
+
+[node name="Content" type="VBoxContainer" parent="Margin"]
+theme_override_constants/separation = 16
+
+[node name="TopBar" parent="Margin/Content" instance=ExtResource("2_tb")]
+title = "Settings"
+show_back = true
+show_coins = false
+
+[node name="AudioPanel" type="PanelContainer" parent="Margin/Content"]
+theme_type_variation = "Card"
+
+[node name="AudioBody" type="VBoxContainer" parent="Margin/Content/AudioPanel"]
+theme_override_constants/separation = 16
+
+[node name="AudioHeading" type="Label" parent="Margin/Content/AudioPanel/AudioBody"]
+theme_type_variation = "Heading"
+text = "Audio"
+
+[node name="VolumeRow" type="VBoxContainer" parent="Margin/Content/AudioPanel/AudioBody"]
+theme_override_constants/separation = 8
+
+[node name="VolumeHeader" type="HBoxContainer" parent="Margin/Content/AudioPanel/AudioBody/VolumeRow"]
+
+[node name="VolumeTitle" type="Label" parent="Margin/Content/AudioPanel/AudioBody/VolumeRow/VolumeHeader"]
+theme_type_variation = "Body"
+text = "Master volume"
+size_flags_horizontal = 3
+
+[node name="VolumeValueLabel" type="Label" parent="Margin/Content/AudioPanel/AudioBody/VolumeRow/VolumeHeader"]
+theme_type_variation = "Caption"
+text = "80%"
+
+[node name="VolumeSlider" type="HSlider" parent="Margin/Content/AudioPanel/AudioBody/VolumeRow"]
+size_flags_horizontal = 3
+size_flags_vertical = 4
+max_value = 1.0
+step = 0.05
+value = 0.8
+
+[node name="AccountPanel" type="PanelContainer" parent="Margin/Content"]
+theme_type_variation = "Card"
+
+[node name="AccountBody" type="VBoxContainer" parent="Margin/Content/AccountPanel"]
+theme_override_constants/separation = 12
+
+[node name="AccountHeading" type="Label" parent="Margin/Content/AccountPanel/AccountBody"]
+theme_type_variation = "Heading"
+text = "Account"
+
+[node name="SignInButton" parent="Margin/Content/AccountPanel/AccountBody" instance=ExtResource("3_btn")]
+disabled = true
+variant = 1
+text = "Sign in / Register"
+
+[node name="AccountHint" type="Label" parent="Margin/Content/AccountPanel/AccountBody"]
+theme_type_variation = "Caption"
+text = "Guest play is active. Accounts arrive in a later phase."
+
+[node name="AboutPanel" type="PanelContainer" parent="Margin/Content"]
+theme_type_variation = "Card"
+
+[node name="AboutBody" type="VBoxContainer" parent="Margin/Content/AboutPanel"]
+theme_override_constants/separation = 8
+
+[node name="AboutHeading" type="Label" parent="Margin/Content/AboutPanel/AboutBody"]
+theme_type_variation = "Heading"
+text = "About"
+
+[node name="AboutText" type="Label" parent="Margin/Content/AboutPanel/AboutBody"]
+theme_type_variation = "Body"
+text = "AATAMGT — Indian strategy games"
+
+[node name="VersionLabel" type="Label" parent="Margin/Content/AboutPanel/AboutBody"]
+theme_type_variation = "Caption"
+text = "Version 0.1.0"
+
+[node name="Spacer" type="Control" parent="Margin/Content"]
+size_flags_vertical = 3
