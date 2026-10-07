@@ -25,6 +25,9 @@ var auth: AuthService
 ## Phase 6: authoritative realtime match session.
 var online: OnlineMatchService
 
+## Phase 8: rewarded + interstitial ads behind a provider abstraction.
+var ads: AdService
+
 var _bootstrapped := false
 
 
@@ -38,6 +41,7 @@ func _init() -> void:
 	api_client = ApiClient.new()
 	auth = AuthService.new(api_client)
 	online = OnlineMatchService.new(api_client, auth)
+	ads = AdService.new(auth)
 
 
 func _ready() -> void:
@@ -49,6 +53,7 @@ func _ready() -> void:
 	auth.session_changed.connect(_on_session_changed)
 	auth.signed_out.connect(_on_signed_out)
 	api_client.reachability_changed.connect(_on_reachability)
+	ads.reward_granted.connect(_on_reward_granted)
 
 
 ## (Re)points the API client at the configured backend. Returns false
@@ -117,11 +122,19 @@ func refresh_wallet() -> void:
 func _on_session_changed(session_user: Dictionary) -> void:
 	user.apply_session_user(session_user)
 	refresh_wallet()  # fire-and-forget: login screens don't block on it
+	ads.refresh_config()  # fire-and-forget: server-driven ad config
 
 
 func _on_signed_out() -> void:
 	user.apply_signed_out()
 	coins.set_balance_from_server(0)  # never leak the previous account's balance
+	ads.clear_config()
+
+
+## Phase 8: a server-VALIDATED rewarded ad moved coins — re-read the
+## authoritative balance instead of trusting the grant payload.
+func _on_reward_granted(_tier: String, _coins: int) -> void:
+	refresh_wallet()
 
 
 func _on_reachability(reachable: bool) -> void:

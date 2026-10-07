@@ -228,14 +228,17 @@ func _run() -> void:
 	# --- Phase 7: virtual coin wallet (client contract) --------------
 	_test_phase7_wallet()
 
+	# --- Phase 8: ad architecture (client contract) -----------------
+	_test_phase8_ads()
+
 	_finish()
 
 
 ## Phase 7 offline contract: the client can only OBSERVE the coin
 ## balance. CoinService exposes exactly one writer — a server-pushed
 ## value — and has no add/spend/mint API. AuthService exposes the
-## read-only wallet fetch and the rewarded-ad stub whose coin amount
-## the server alone decides.
+## read-only wallet fetch; rewarded-ad grants moved to AdService in
+## Phase 8, where the server alone decides the coin amount.
 func _test_phase7_wallet() -> void:
 	var coin_methods := []
 	for m in _app.coins.get_method_list():
@@ -253,8 +256,8 @@ func _test_phase7_wallet() -> void:
 			"AuthService exposes the wallet read (GET /wallet)")
 	_check(auth_methods.has("authenticated_post"),
 			"AuthService exposes authenticated POST for grants")
-	_check(auth_methods.has("claim_rewarded_ad"),
-			"AuthService exposes the rewarded-ad claim stub")
+	_check(not auth_methods.has("claim_rewarded_ad"),
+			"the superseded ad claim stub is gone from AuthService")
 
 	_app.coins.set_balance_from_server(4200)
 	_check(_app.coins.get_balance() == 4200,
@@ -262,6 +265,78 @@ func _test_phase7_wallet() -> void:
 	_app.coins.set_balance_from_server(0)
 	_check(_app.coins.get_balance() == 0,
 			"balance resets only from a server payload")
+
+
+## Phase 8 client contract: every ad goes AdService -> AdProvider ->
+## server. The client holds no ad unit IDs, never grants coins itself
+## (reward_granted only fires after server validation), and checks
+## interstitial eligibility only from a dismissed result dialog.
+func _test_phase8_ads() -> void:
+	_check(_app.ads != null, "App exposes the AdService")
+	var ad_methods := []
+	for m in _app.ads.get_method_list():
+		ad_methods.append(str(m.get("name", "")))
+	for required in ["refresh_config", "request_rewarded", "check_interstitial"]:
+		_check(ad_methods.has(required), "AdService exposes %s" % required)
+
+	_check(_app.ads.has_signal("reward_granted") and _app.ads.has_signal("reward_failed"),
+			"AdService reports validated grants and failures")
+	_check(_app.ads.is_connected("reward_granted", Callable(_app, "_on_reward_granted")),
+			"App re-reads the wallet after a validated grant")
+
+	var stub := StubAdProvider.new()
+	_check(stub is AdProvider, "StubAdProvider implements AdProvider")
+	var provider_methods := []
+	for m in stub.get_method_list():
+		provider_methods.append(str(m.get("name", "")))
+	_check(provider_methods.has("show_rewarded"),
+			"provider abstraction can present rewarded ads")
+	_check(provider_methods.has("show_interstitial"),
+			"provider abstraction can present interstitials")
+
+	var dialog_signals := []
+	for s in _app.dialog.get_signal_list():
+		dialog_signals.append(str(s.get("name", "")))
+	_check(dialog_signals.has("error_dismissed"),
+			"DialogService forwards result-dialog dismissals")
+
+	_check(_scan_text("res://src", "ca-app-pub").is_empty(),
+			"no ad unit IDs hardcoded under src/")
+	_check(_scan_text("res://src", "rewards/ad").is_empty(),
+			"unvalidated Phase 7 ad endpoint gone from the client")
+	_check(not _scan_text("res://src/ui/screens/aadu_puli.gd",
+			"check_interstitial").is_empty(),
+			"dismissed result dialog triggers the interstitial check")
+
+
+## Every .gd file under `path` (or the file itself) containing `needle`.
+func _scan_text(path: String, needle: String) -> Array:
+	if path.ends_with(".gd"):
+		var only := FileAccess.open(path, FileAccess.READ)
+		if only == null:
+			return []
+		var found := only.get_as_text().contains(needle)
+		only.close()
+		return [path] if found else []
+	var hits: Array = []
+	var dir := DirAccess.open(path)
+	if dir == null:
+		return hits
+	dir.list_dir_begin()
+	var file_name := dir.get_next()
+	while file_name != "":
+		var full := path + "/" + file_name
+		if dir.current_is_dir() and not file_name.begins_with("."):
+			hits.append_array(_scan_text(full, needle))
+		elif file_name.ends_with(".gd"):
+			var file := FileAccess.open(full, FileAccess.READ)
+			if file != null:
+				if file.get_as_text().contains(needle):
+					hits.append(full)
+				file.close()
+		file_name = dir.get_next()
+	dir.list_dir_end()
+	return hits
 
 
 ## Phase 6 offline contract: the Online opponent mode exists, hides

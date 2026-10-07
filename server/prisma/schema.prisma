@@ -37,6 +37,7 @@ model User {
   isGuest       Boolean    @default(false)
   lastLoginAt   DateTime?
   deletedAt     DateTime?
+  royalPassExpiresAt DateTime?
   createdAt     DateTime   @default(now())
   updatedAt     DateTime   @updatedAt
 
@@ -47,6 +48,8 @@ model User {
   matchMoves      MatchMove[]
   dailyRewards    DailyReward[]
   notifications   Notification[]
+  adSessions      AdSession[]
+  adShows         AdShow[]
   friendshipsSent Friendship[]   @relation("friend_requester")
   friendshipsGot  Friendship[]   @relation("friend_addressee")
   leaderboardRows LeaderboardEntry[]
@@ -260,6 +263,49 @@ model DailyReward {
 
   @@unique([userId, rewardDate])
   @@index([userId])
+}
+
+// ---------------------------------------------------------------------------
+// Ads (Phase 8)
+// ---------------------------------------------------------------------------
+
+enum AdSessionStatus {
+  OPEN
+  REDEEMED
+}
+
+/// Server-issued opportunity to watch a rewarded ad. Coins are granted
+/// only against a session the backend itself minted — a bare client
+/// callback can never pay out.
+model AdSession {
+  id         String           @id @default(cuid())
+  userId     String
+  provider   String           @db.VarChar(32)
+  tier       String           @db.VarChar(16)
+  nonce      String           @unique @db.VarChar(64)
+  status     AdSessionStatus  @default(OPEN)
+  expiresAt  DateTime
+  redeemedAt DateTime?
+  createdAt  DateTime         @default(now())
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId, createdAt])
+  @@index([expiresAt])
+}
+
+/// Audit record of interstitial presentations — powers the show-rate
+/// cooldown so interstitials never fire after every match.
+model AdShow {
+  id      String   @id @default(cuid())
+  userId  String
+  kind    String   @db.VarChar(16)
+  matchId String?  @db.VarChar(64)
+  shownAt DateTime @default(now())
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId, kind, shownAt])
 }
 
 enum FriendStatus {

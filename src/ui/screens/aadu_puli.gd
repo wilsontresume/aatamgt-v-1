@@ -69,6 +69,10 @@ var _online_mode := false
 var _submitting := false
 var _announced_match_id := ""
 
+## Phase 8: match whose result dialog is on screen — checked for an
+## interstitial once the player dismisses it (never mid-game).
+var _result_dialog_match_id := ""
+
 
 func _ready() -> void:
 	_load_settings()
@@ -483,14 +487,30 @@ func _maybe_announce_completion() -> void:
 	var reason := str(App.online.completion.get("reason", ""))
 	match mine:
 		"WIN":
-			App.dialog.show_error("You win!", _completion_text(reason, true))
+			_announce_online_result("You win!", _completion_text(reason, true))
 		"LOSS":
-			App.dialog.show_error("You lose", _completion_text(reason, false))
+			_announce_online_result("You lose", _completion_text(reason, false))
 		"DRAW":
-			App.dialog.show_error("Draw",
+			_announce_online_result("Draw",
 					"The match ended without a winner.")
 		_:
 			pass  # not a participant in the result map: no dialog
+
+
+## Shows the finished-match result dialog and arms the Phase 8
+## interstitial check: once the player dismisses this dialog we ask the
+## SERVER whether an interstitial is due (never during active play).
+func _announce_online_result(title: String, message: String) -> void:
+	_result_dialog_match_id = App.online.match_id
+	App.dialog.error_dismissed.connect(
+			_on_result_dialog_dismissed, CONNECT_ONE_SHOT)
+	App.dialog.show_error(title, message)
+
+
+func _on_result_dialog_dismissed() -> void:
+	var match_id := _result_dialog_match_id
+	_result_dialog_match_id = ""
+	App.ads.check_interstitial(match_id)
 
 
 func _completion_text(reason: String, won: bool) -> String:

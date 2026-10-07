@@ -14,16 +14,35 @@ describe('Virtual coins (Phase 7)', () => {
   let app: INestApplication;
   let adminToken: string;
 
-  const postAd = (
+  const openAdSession = (target: INestApplication, token: string, tier = 'BONUS') =>
+    request(target.getHttpServer())
+      .post(`${apiPrefix(target)}/ads/rewarded/session`)
+      .set(auth(token))
+      .send({ tier });
+
+  const redeemAd = (
     target: INestApplication,
     token: string,
-    tier: string,
-    idempotencyKey: string,
+    nonce: string,
+    payload?: Record<string, unknown>,
   ) =>
     request(target.getHttpServer())
-      .post(`${apiPrefix(target)}/rewards/ad`)
+      .post(`${apiPrefix(target)}/ads/rewarded/redeem`)
       .set(auth(token))
-      .send({ tier, idempotencyKey });
+      .send(payload ? { nonce, payload } : { nonce });
+
+  /** Full happy path: server-minted session, then redeem. Returns the redeem response. */
+  const watchAd = async (
+    target: INestApplication,
+    token: string,
+    tier = 'BONUS',
+    payload?: Record<string, unknown>,
+  ) => {
+    const session = await openAdSession(target, token, tier);
+    expect(session.status).toBe(200);
+    const redeem = await redeemAd(target, token, session.body.nonce, payload);
+    return redeem;
+  };
 
   beforeAll(async () => {
     app = await createTestApp();
@@ -41,16 +60,18 @@ describe('Virtual coins (Phase 7)', () => {
   });
 
   describe('duplicate rewards', () => {
-    it('pays a rewarded ad exactly once per idempotency key', async () => {
+    it('pays a rewarded ad exactly once per server session', async () => {
       const user = await registerUser(app);
+      const session = await openAdSession(app, user.accessToken, 'BONUS');
+      expect(session.status).toBe(200);
 
-      const first = await postAd(app, user.accessToken, 'BONUS', 'view-dup-0001');
+      const first = await redeemAd(app, user.accessToken, session.body.nonce);
       expect(first.status).toBe(200);
       expect(first.body.replayed).toBe(false);
       expect(first.body.coins).toBe(500);
       expect(first.body.balance).toBe(1500);
 
-      const second = await postAd(app, user.accessToken, 'BONUS', 'view-dup-0001');
+      const second = await redeemAd(app, user.accessToken, session.body.nonce);
       expect(second.status).toBe(200);
       expect(second.body.replayed).toBe(true);
       expect(second.body.transactionId).toBe(first.body.transactionId);
@@ -85,11 +106,16 @@ describe('Virtual coins (Phase 7)', () => {
   });
 
   describe('concurrent transactions', () => {
-    it('lands every distinct-key credit submitted in parallel exactly once', async () => {
+    it('lands every distinct-session credit submitted in parallel exactly once', async () => {
       const user = await registerUser(app);
 
+      const sessions = await Promise.all(
+        [0, 1, 2, 3, 4].map(() => openAdSession(app, user.accessToken, 'STANDARD')),
+      );
+      for (const s of sessions) expect(s.status).toBe(200);
+
       const responses = await Promise.all(
-        [0, 1, 2, 3, 4].map((i) => postAd(app, user.accessToken, 'STANDARD', `view-par-${i}a`)),
+        sessions.map((s) => redeemAd(app, user.accessToken, s.body.nonce)),
       );
       for (const res of responses) expect(res.status).toBe(200);
       expect(responses.filter((r) => r.body.replayed === false)).toHaveLength(5);
@@ -107,13 +133,16 @@ describe('Virtual coins (Phase 7)', () => {
       expect(integrity.body.transactionCount).toBe(6);
     });
 
-    it('pays only once when the same key is submitted in parallel', async () => {
+    it('pays only once when the same session is redeemed in parallel', async () => {
       const user = await registerUser(app);
+      const session = await openAdSession(app, user.accessToken, 'BONUS');
+      expect(session.status).toBe(200);
 
       const responses = await Promise.all(
-        [0, 1, 2, 3, 4].map(() => postAd(app, user.accessToken, 'BONUS', 'view-same-01')),
+        [0, 1, 2, 3, 4].map(() => redeemAd(app, user.accessToken, session.body.nonce)),
       );
       for (const res of responses) expect(res.status).toBe(200);
+      expect(responses.filter((r) => r.body.replayed === false)).toHaveLength(1);
 
       const balance = await request(app.getHttpServer())
         .get(`${apiPrefix(app)}/wallet`)
@@ -175,11 +204,14 @@ describe('Virtual coins (Phase 7)', () => {
   describe('transaction replay', () => {
     it('replays to the original transaction without writing a new ledger row', async () => {
       const user = await registerUser(app);
+      const session = await openAdSession(app, user.accessToken, 'STANDARD');
+      expect(session.status).toBe(200);
 
-      const first = await postAd(app, user.accessToken, 'STANDARD', 'view-replay-1');
+      const first = await redeemAd(app, user.accessToken, session.body.nonce);
+      expect(first.status).toBe(200);
       expect(first.body.replayed).toBe(false);
 
-      const replay = await postAd(app, user.accessToken, 'STANDARD', 'view-replay-1');
+      const replay = await redeemAd(app, user.accessToken, session.body.nonce);
       expect(replay.status).toBe(200);
       expect(replay.body.replayed).toBe(true);
       expect(replay.body.transactionId).toBe(first.body.transactionId);
@@ -197,13 +229,13 @@ describe('Virtual coins (Phase 7)', () => {
       expect(balance.body.balance).toBe(1100);
     });
 
-    it('rejects replayed-shaped requests that omit the key', async () => {
+    it('rejects a redeem that omits the nonce', async () => {
       const user = await registerUser(app);
-      const noKey = await request(app.getHttpServer())
-        .post(`${apiPrefix(app)}/rewards/ad`)
+      const noNonce = await request(app.getHttpServer())
+        .post(`${apiPrefix(app)}/ads/rewarded/redeem`)
         .set(auth(user.accessToken))
-        .send({ tier: 'BONUS' });
-      expect(noKey.status).toBe(400);
+        .send({ payload: { anything: true } });
+      expect(noNonce.status).toBe(400);
     });
   });
 
@@ -214,7 +246,8 @@ describe('Virtual coins (Phase 7)', () => {
       await request(app.getHttpServer())
         .post(`${apiPrefix(app)}/rewards/daily/claim`)
         .set(auth(user.accessToken));
-      await postAd(app, user.accessToken, 'BONUS', 'view-mix-0001');
+      const ad = await watchAd(app, user.accessToken, 'BONUS');
+      expect(ad.status).toBe(200);
       await request(app.getHttpServer())
         .post(`${apiPrefix(app)}/admin/wallets/${user.id}/adjust`)
         .set(auth(adminToken))
@@ -295,10 +328,10 @@ describe('Virtual coins (Phase 7)', () => {
       expect(daily.body.coins).toBe(33);
       expect(daily.body.balance).toBe(810);
 
-      const bonus = await postAd(cfgApp, user.accessToken, 'BONUS', 'view-cfg-0001');
+      const bonus = await watchAd(cfgApp, user.accessToken, 'BONUS');
       expect(bonus.body.coins).toBe(888);
 
-      const standard = await postAd(cfgApp, user.accessToken, 'STANDARD', 'view-cfg-0002');
+      const standard = await watchAd(cfgApp, user.accessToken, 'STANDARD');
       expect(standard.body.coins).toBe(44);
       expect(standard.body.balance).toBe(1742); // 777 + 33 + 888 + 44
 

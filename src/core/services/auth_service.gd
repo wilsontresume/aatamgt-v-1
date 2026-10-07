@@ -259,21 +259,6 @@ func fetch_wallet() -> Dictionary:
 	return await authenticated_get("/wallet")
 
 
-## Phase 7 rewarded-ad stub — no ad SDK yet. When an SDK lands, its
-## completion callback will invoke this. The per-view idempotency key
-## makes retries safe; the SERVER maps tier -> configured coin amount,
-## so this call can never choose how many coins are granted.
-func claim_rewarded_ad(tier: String) -> Dictionary:
-	return await authenticated_post("/rewards/ad", {
-		"tier": tier,
-		"idempotencyKey": _ad_view_key(),
-	})
-
-
-func _ad_view_key() -> String:
-	return "view-%d-%d" % [Time.get_ticks_usec(), randi()]
-
-
 # ----------------------------------------------------------------------
 
 ## Stores tokens from a successful auth response and emits

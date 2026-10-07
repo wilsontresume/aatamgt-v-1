@@ -73,6 +73,38 @@ export class EnvironmentVariables {
   @IsInt()
   @Min(0)
   COINS_REWARDED_AD_STANDARD: number;
+
+  @IsOptional()
+  @IsIn(['stub', 'admob', 'unity_ads'])
+  ADS_PROVIDER: string;
+
+  @IsOptional()
+  @IsString()
+  ADS_REWARDED_UNIT_ID: string;
+
+  @IsOptional()
+  @IsString()
+  ADS_INTERSTITIAL_UNIT_ID: string;
+
+  @IsOptional()
+  @IsInt()
+  @Min(1)
+  ADS_SESSION_TTL_SECONDS: number;
+
+  @IsOptional()
+  @IsInt()
+  @Min(0)
+  ADS_INTERSTITIAL_AFTER_WINS: number;
+
+  @IsOptional()
+  @IsInt()
+  @Min(0)
+  ADS_INTERSTITIAL_AFTER_LOSSES: number;
+
+  @IsOptional()
+  @IsInt()
+  @Min(0)
+  ADS_INTERSTITIAL_COOLDOWN_MATCHES: number;
 }
 
 const defaults: Record<string, unknown> = {
@@ -112,6 +144,10 @@ export function validate(config: Record<string, unknown>): EnvironmentVariables 
     COINS_DAILY_LOGIN_BONUS: toNumber(config.COINS_DAILY_LOGIN_BONUS, 100),
     COINS_REWARDED_AD_BONUS: toNumber(config.COINS_REWARDED_AD_BONUS, 500),
     COINS_REWARDED_AD_STANDARD: toNumber(config.COINS_REWARDED_AD_STANDARD, 100),
+    ADS_SESSION_TTL_SECONDS: toNumber(config.ADS_SESSION_TTL_SECONDS, 300),
+    ADS_INTERSTITIAL_AFTER_WINS: toNumber(config.ADS_INTERSTITIAL_AFTER_WINS, 3),
+    ADS_INTERSTITIAL_AFTER_LOSSES: toNumber(config.ADS_INTERSTITIAL_AFTER_LOSSES, 5),
+    ADS_INTERSTITIAL_COOLDOWN_MATCHES: toNumber(config.ADS_INTERSTITIAL_COOLDOWN_MATCHES, 2),
   };
 
   const instance = new EnvironmentVariables();

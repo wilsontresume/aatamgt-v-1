@@ -28,6 +28,15 @@ export interface AppConfig {
     rewardedAdBonus: number;
     rewardedAdStandard: number;
   };
+  ads: {
+    provider: string;
+    rewardedUnitId: string;
+    interstitialUnitId: string;
+    sessionTtlSeconds: number;
+    interstitialAfterWins: number;
+    interstitialAfterLosses: number;
+    interstitialCooldownMatches: number;
+  };
   logLevel: string;
 }
 
@@ -64,6 +73,15 @@ export default registerAs<AppConfig>('app', () => {
       dailyLoginBonus: num(process.env.COINS_DAILY_LOGIN_BONUS, 100),
       rewardedAdBonus: num(process.env.COINS_REWARDED_AD_BONUS, 500),
       rewardedAdStandard: num(process.env.COINS_REWARDED_AD_STANDARD, 100),
+    },
+    ads: {
+      provider: process.env.ADS_PROVIDER ?? 'stub',
+      rewardedUnitId: process.env.ADS_REWARDED_UNIT_ID ?? '',
+      interstitialUnitId: process.env.ADS_INTERSTITIAL_UNIT_ID ?? '',
+      sessionTtlSeconds: num(process.env.ADS_SESSION_TTL_SECONDS, 300),
+      interstitialAfterWins: num(process.env.ADS_INTERSTITIAL_AFTER_WINS, 3),
+      interstitialAfterLosses: num(process.env.ADS_INTERSTITIAL_AFTER_LOSSES, 5),
+      interstitialCooldownMatches: num(process.env.ADS_INTERSTITIAL_COOLDOWN_MATCHES, 2),
     },
     logLevel: process.env.LOG_LEVEL ?? 'info',
   };

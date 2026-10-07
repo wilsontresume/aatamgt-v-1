@@ -1,4 +1,4 @@
-import { BadRequestException, ConflictException } from '@nestjs/common';
+import { ConflictException } from '@nestjs/common';
 import { RewardsService } from '../../src/rewards/rewards.service';
 
 const coinsConfig = {
@@ -103,69 +103,5 @@ describe('RewardsService — daily login', () => {
     const status = await service.status('u1');
     expect(status.nextRewardCoins).toBe(100);
     expect(status.todayClaimed).toBe(false);
-  });
-});
-
-describe('RewardsService — rewarded ads (no SDK yet)', () => {
-  it('credits the configured BONUS tier amount with a unique key', async () => {
-    const { service, wallet, notifications } = makeRewards({});
-    const result = await service.claimRewardedAd('u1', 'BONUS', 'view-000001');
-
-    expect(result.coins).toBe(500);
-    expect(result.replayed).toBe(false);
-    expect(wallet.credit).toHaveBeenCalledWith(
-      'u1',
-      500,
-      expect.objectContaining({
-        type: 'REWARDED_AD',
-        refId: 'BONUS',
-        idempotencyKey: 'ad:u1:view-000001',
-      }),
-    );
-    expect(notifications.notify).toHaveBeenCalledTimes(1);
-  });
-
-  it('credits the configured STANDARD tier amount', async () => {
-    const { service, wallet } = makeRewards({});
-    const result = await service.claimRewardedAd('u1', 'STANDARD', 'view-000002');
-
-    expect(result.coins).toBe(100);
-    expect(wallet.credit).toHaveBeenCalledWith(
-      'u1',
-      100,
-      expect.objectContaining({ type: 'REWARDED_AD', refId: 'STANDARD' }),
-    );
-  });
-
-  it('returns the original transaction on replay and does not notify again', async () => {
-    const { service, wallet, notifications } = makeRewards({
-      creditResult: {
-        transaction: { id: 't-original', amount: 500 },
-        wallet: { balance: 500 },
-        replayed: true,
-      },
-    });
-    const result = await service.claimRewardedAd('u1', 'BONUS', 'view-000001');
-
-    expect(result.replayed).toBe(true);
-    expect(result.transactionId).toBe('t-original');
-    expect(notifications.notify).not.toHaveBeenCalled();
-  });
-
-  it('rejects an unknown tier', async () => {
-    const { service } = makeRewards({});
-    await expect(service.claimRewardedAd('u1', 'MEGA', 'view-000003')).rejects.toBeInstanceOf(
-      BadRequestException,
-    );
-  });
-
-  it('rejects a malformed idempotency key', async () => {
-    const { service } = makeRewards({});
-    await expect(service.claimRewardedAd('u1', 'BONUS', 'short')).rejects.toBeInstanceOf(
-      BadRequestException,
-    );
-    await expect(service.claimRewardedAd('u1', 'BONUS', 'bad key with spaces')).rejects.toBeInstanceOf(
-      BadRequestException,
-    );
   });
 });

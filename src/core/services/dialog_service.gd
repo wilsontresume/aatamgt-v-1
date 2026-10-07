@@ -5,6 +5,10 @@ extends RefCounted
 ## only talk to this service.
 
 signal confirm_resolved(result: bool)
+## Phase 8: the error dialog dismissed (closed). Result dialogs use
+## this as the "player acknowledged the outcome" moment — the point
+## where an interstitial may be checked (never mid-game).
+signal error_dismissed
 
 var _loading: Node = null
 var _error_dialog: Node = null
@@ -19,6 +23,9 @@ func bind(loading: Node, error_dialog: Node, confirm_dialog: Node) -> void:
 	if _confirm_dialog != null and _confirm_dialog.has_signal("confirmed") \
 			and not _confirm_dialog.is_connected("confirmed", _on_confirm_confirmed):
 		_confirm_dialog.connect("confirmed", _on_confirm_confirmed)
+	if _error_dialog != null and _error_dialog.has_signal("dismissed") \
+			and not _error_dialog.is_connected("dismissed", _on_error_dismissed):
+		_error_dialog.connect("dismissed", _on_error_dismissed)
 
 
 func is_bound() -> bool:
@@ -64,3 +71,7 @@ func _deferred_resolve_false() -> void:
 
 func _on_confirm_confirmed(result: bool) -> void:
 	confirm_resolved.emit(result)
+
+
+func _on_error_dismissed() -> void:
+	error_dismissed.emit()

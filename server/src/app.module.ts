@@ -22,6 +22,7 @@ import { MatchesModule } from './matches/matches.module';
 import { RealtimeModule } from './realtime/realtime.module';
 import { LeaderboardsModule } from './leaderboards/leaderboards.module';
 import { RewardsModule } from './rewards/rewards.module';
+import { AdsModule } from './ads/ads.module';
 import { FriendsModule } from './friends/friends.module';
 import { NotificationsModule } from './notifications/notifications.module';
 import { AdminModule } from './admin/admin.module';
@@ -57,6 +58,7 @@ import { AdminModule } from './admin/admin.module';
     RealtimeModule,
     LeaderboardsModule,
     RewardsModule,
+    AdsModule,
     FriendsModule,
     NotificationsModule,
     AdminModule,
