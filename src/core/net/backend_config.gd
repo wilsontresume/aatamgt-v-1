@@ -1,0 +1,81 @@
+class_name BackendConfig
+extends RefCounted
+## Backend endpoint policy — the single place that decides which server
+## the client talks to and which transports are acceptable.
+##
+## Security rules (Phase 3):
+##  - HTTPS is mandatory for every host except loopback development.
+##  - The base URL comes from the AATAMGT_API_URL environment variable
+##    (set per build) or falls back to the local development backend.
+##  - No credentials, tokens, or secrets are ever stored here; tokens
+##    live only in the AuthService session file.
+
+## Development default: the locally hosted NestJS backend over TLS
+## (server/scripts/dev-cert.sh). Production builds override this via
+## AATAMGT_API_URL.
+const DEFAULT_BASE_URL := "https://127.0.0.1:3443"
+
+const ENV_BASE_URL := "AATAMGT_API_URL"
+const ENV_CA_CERT := "AATAMGT_CA_CERT"
+
+const LOOPBACK_HOSTS := ["127.0.0.1", "localhost", "::1", "[::1]"]
+
+
+## Resolved endpoint for this run: env override, else default.
+static func resolve_base_url() -> String:
+	var from_env := OS.get_environment(ENV_BASE_URL).strip_edges()
+	return normalize(from_env) if not from_env.is_empty() else DEFAULT_BASE_URL
+
+
+## Optional CA bundle for TLS verification (self-signed dev backends).
+## Empty string = trust the platform certificate store.
+static func ca_cert_path() -> String:
+	return OS.get_environment(ENV_CA_CERT).strip_edges()
+
+
+## Returns the normalized URL (no trailing slash) when the URL satisfies
+## the transport policy, or "" when it is rejected. Plain HTTP is only
+## tolerated for loopback addresses (local development).
+static func validate_url(url: String) -> String:
+	var candidate := normalize(url)
+	if candidate.is_empty():
+		return ""
+	var scheme := _scheme(candidate)
+	if scheme == "https":
+		return candidate if _host(candidate) != "" else ""
+	if scheme == "http":
+		var host := _host(candidate).to_lower()
+		if host in LOOPBACK_HOSTS:
+			return candidate
+	return ""
+
+
+static func normalize(url: String) -> String:
+	var trimmed := url.strip_edges()
+	while trimmed.ends_with("/"):
+		trimmed = trimmed.substr(0, trimmed.length() - 1)
+	return trimmed
+
+
+static func _scheme(url: String) -> String:
+	var idx := url.find("://")
+	if idx <= 0:
+		return ""
+	return url.substr(0, idx).to_lower()
+
+
+static func _host(url: String) -> String:
+	var scheme_end := url.find("://")
+	if scheme_end < 0:
+		return ""
+	var rest := url.substr(scheme_end + 3)
+	rest = rest.split("/")[0]
+	rest = rest.split("?")[0]
+	# Strip credentials and port, keep bracketed IPv6 hosts intact.
+	var at := rest.rfind("@")
+	if at >= 0:
+		rest = rest.substr(at + 1)
+	if rest.begins_with("["):
+		var close := rest.find("]")
+		return "" if close < 0 else rest.substr(0, close + 1)
+	return rest.split(":")[0]

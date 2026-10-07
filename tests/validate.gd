@@ -9,6 +9,8 @@ const SCREEN_ROOT_NAMES := {
 	&"game_selection": "GameSelection",
 	&"profile": "Profile",
 	&"settings": "Settings",
+	&"auth": "AuthScreen",
+	&"aadu_puli": "AaduPuliScreen",
 }
 
 var _checks := 0
@@ -27,6 +29,19 @@ func _process(_delta: float) -> bool:
 
 func _run() -> void:
 	await _frame()
+
+	# Phase 3: start every run from a clean slate so a stored session
+	# can never delay or redirect the assertions below.
+	if FileAccess.file_exists("user://session.json"):
+		var user_dir := DirAccess.open("user://")
+		if user_dir != null:
+			user_dir.remove("session.json")
+
+	# Phase 4: a stored Aadu Puli position must not leak into the checks.
+	if FileAccess.file_exists("user://aadu_puli_save.json"):
+		var game_dir := DirAccess.open("user://")
+		if game_dir != null:
+			game_dir.remove("aadu_puli_save.json")
 
 	# --- Autoload ------------------------------------------------------
 	_app = get_root().get_node_or_null("/root/App")
@@ -59,7 +74,8 @@ func _run() -> void:
 	_check(_app.navigation.current == &"main_menu", "splash auto-advances to main menu")
 
 	# --- Every screen instantiates with correct root -------------------
-	for screen_id in [&"game_selection", &"profile", &"settings", &"main_menu"]:
+	for screen_id in [&"game_selection", &"profile", &"settings", &"auth",
+			&"aadu_puli", &"main_menu"]:
 		_app.navigation.go(screen_id)
 		await _frame()
 		await _frame()
@@ -126,7 +142,351 @@ func _run() -> void:
 	_check(_app.network.get_status() == NetworkService.Status.OFFLINE, "network reports offline in Phase 1")
 	_check(_app.coins.get_balance() == 1500, "coin balance mirrors server value")
 
+	# --- Phase 3: backend wiring (offline assertions only) ------------
+	_check(_app.auth != null and _app.api_client != null,
+			"auth service and api client are wired into App")
+	_check(not _app.auth.is_authenticated(), "no session after a clean boot")
+	_check(not _app.auth.has_stored_session(), "guest boot writes no session file")
+	_check(BackendConfig.validate_url("https://api.example.com") == "https://api.example.com",
+			"https backend urls are accepted")
+	_check(BackendConfig.validate_url("http://evil.example.com") == "",
+			"plain http on a public host is rejected")
+	_check(BackendConfig.validate_url("http://127.0.0.1:3000") == "http://127.0.0.1:3000",
+			"loopback http stays available for development")
+	_check(BackendConfig.validate_url("https://api.example.com/") == "https://api.example.com",
+			"trailing slash is normalized")
+	_check(not _app.api_client.is_reachable(), "no reachability claim before any request")
+
+	_app.navigation.go(&"settings")
+	await _frame()
+	await _frame()
+	var settings_screen: Control = null
+	for child in screen_container.get_children():
+		if child.name == "Settings":
+			settings_screen = child
+	var sign_in_button: Button = settings_screen.get_node_or_null(
+			"Margin/Content/AccountPanel/AccountBody/SignInButton") 			if settings_screen != null else null
+	_check(sign_in_button != null and not sign_in_button.disabled,
+			"settings sign-in button is enabled")
+
+	# --- Phase 4: Aadu Puli Aattam (offline hot seat) -------------------
+	_app.navigation.go(&"aadu_puli")
+	await _frame()
+	await _frame()
+	var aadu_screen: Control = null
+	for child in screen_container.get_children():
+		if child.name == "AaduPuliScreen":
+			aadu_screen = child
+	_check(aadu_screen != null, "aadu_puli screen instantiates")
+	if aadu_screen != null:
+		var status: Label = aadu_screen.get_node_or_null("Margin/Content/StatusLabel")
+		var detail: Label = aadu_screen.get_node_or_null("Margin/Content/DetailLabel")
+		var undo_btn: Button = aadu_screen.get_node_or_null(
+				"Margin/Content/Controls/UndoButton")
+		var board: Control = aadu_screen.get_node_or_null("Margin/Content/Board")
+		_check(status != null and status.text == "Goats to move — place a goat",
+				"fresh game asks the goats to place")
+		_check(detail != null and detail.text.contains("15 in hand"),
+				"detail shows the goat hand")
+		_check(undo_btn != null and undo_btn.disabled, "undo starts disabled")
+		_check(board != null and board.has_signal("point_activated"),
+				"board exposes point activation")
+
+		if board != null and status != null and undo_btn != null:
+			# Hot seat first: a persisted vs-AI preference must never
+			# race the Phase 4 assertions (Phase 5 switches it back).
+			var hot_seat_btn: Button = aadu_screen.get_node_or_null(
+					"Margin/Content/ModeRow/HotSeatButton")
+			_check(hot_seat_btn != null, "hot seat toggle exists")
+			if hot_seat_btn != null:
+				hot_seat_btn.pressed.emit()
+				await _frame()
+				_check(status.text == "Goats to move — place a goat",
+						"hot seat mode selects without touching the game")
+			# Drive a full move through the view signal (no rendering needed).
+			board.emit_signal("point_activated", 7)
+			await _frame()
+			_check(status.text == "Tigers to move — step or jump",
+					"placing through the board submits the move")
+			_check(not undo_btn.disabled, "undo enables after a move")
+			_check(FileAccess.file_exists("user://aadu_puli_save.json"),
+					"position is saved after a move")
+			undo_btn.pressed.emit()
+			await _frame()
+			_check(status.text == "Goats to move — place a goat",
+					"undo restores the previous position")
+			_check(undo_btn.disabled, "undo disables at the start again")
+
+		# --- Phase 5: Aadu Puli Aattam AI -----------------------------
+		if board != null and status != null and undo_btn != null:
+			await _test_aadu_puli_ai(aadu_screen, board, status, undo_btn)
+
+		# --- Phase 6: online multiplayer (offline UI contract) -------
+		if status != null and undo_btn != null:
+			await _test_online_ui(aadu_screen, status, undo_btn)
+
+	# --- Phase 7: virtual coin wallet (client contract) --------------
+	_test_phase7_wallet()
+
 	_finish()
+
+
+## Phase 7 offline contract: the client can only OBSERVE the coin
+## balance. CoinService exposes exactly one writer — a server-pushed
+## value — and has no add/spend/mint API. AuthService exposes the
+## read-only wallet fetch and the rewarded-ad stub whose coin amount
+## the server alone decides.
+func _test_phase7_wallet() -> void:
+	var coin_methods := []
+	for m in _app.coins.get_method_list():
+		coin_methods.append(str(m.get("name", "")))
+	_check(coin_methods.has("set_balance_from_server"),
+			"CoinService accepts server-pushed balances")
+	for forbidden in ["add_coins", "spend_coins", "set_balance", "mint", "credit", "debit"]:
+		_check(not coin_methods.has(forbidden),
+				"CoinService has no '%s' mutator" % forbidden)
+
+	var auth_methods := []
+	for m in _app.auth.get_method_list():
+		auth_methods.append(str(m.get("name", "")))
+	_check(auth_methods.has("fetch_wallet"),
+			"AuthService exposes the wallet read (GET /wallet)")
+	_check(auth_methods.has("authenticated_post"),
+			"AuthService exposes authenticated POST for grants")
+	_check(auth_methods.has("claim_rewarded_ad"),
+			"AuthService exposes the rewarded-ad claim stub")
+
+	_app.coins.set_balance_from_server(4200)
+	_check(_app.coins.get_balance() == 4200,
+			"balance follows the server payload")
+	_app.coins.set_balance_from_server(0)
+	_check(_app.coins.get_balance() == 0,
+			"balance resets only from a server payload")
+
+
+## Phase 6 offline contract: the Online opponent mode exists, hides
+## offline-only controls, exposes create/join plus resign/rematch,
+## wires App.online, and never touches the local save. No socket and
+## no session may be created here — this suite runs without a backend.
+func _test_online_ui(screen: Control, status: Label, undo_btn: Button) -> void:
+	var online_btn: Button = screen.get_node_or_null(
+			"Margin/Content/ModeRow/OnlineButton")
+	var online_row: Control = screen.get_node_or_null("Margin/Content/OnlineRow")
+	var new_btn: Button = screen.get_node_or_null(
+			"Margin/Content/OnlineRow/OnlineActions/NewMatchButton")
+	var join_btn: Button = screen.get_node_or_null(
+			"Margin/Content/OnlineRow/OnlineActions/JoinButton")
+	var code_field: LineEdit = screen.get_node_or_null(
+			"Margin/Content/OnlineRow/OnlineActions/MatchIdField")
+	var online_label: Label = screen.get_node_or_null(
+			"Margin/Content/OnlineRow/OnlineStatusLabel")
+	var resign_btn: Button = screen.get_node_or_null(
+			"Margin/Content/Controls/ResignButton")
+	var rematch_btn: Button = screen.get_node_or_null(
+			"Margin/Content/Controls/RematchButton")
+	var restart_btn: Button = screen.get_node_or_null(
+			"Margin/Content/Controls/RestartButton")
+	var hot_seat_btn: Button = screen.get_node_or_null(
+			"Margin/Content/ModeRow/HotSeatButton")
+	var difficulty_row: Control = screen.get_node_or_null(
+			"Margin/Content/DifficultyRow")
+	var badge: Control = screen.get_node_or_null("Margin/Content/ModeRow/AiBadge")
+	_check(_app.online != null, "online match service is wired into App")
+	_check(online_btn != null and online_row != null and new_btn != null
+			and join_btn != null and code_field != null and online_label != null
+			and resign_btn != null and rematch_btn != null and restart_btn != null
+			and hot_seat_btn != null and difficulty_row != null and badge != null,
+			"online controls exist")
+	if online_btn == null or online_row == null or resign_btn == null \
+			or rematch_btn == null or restart_btn == null:
+		return
+	_check(not online_row.visible, "online panel hidden in hot seat mode")
+	_check(not resign_btn.visible and not rematch_btn.visible,
+			"resign/rematch hidden outside online mode")
+	_check(not _app.online.is_connected_to_server(),
+			"no socket before the player enters online mode")
+
+	var save_before := _aadu_save_ply()
+	online_btn.pressed.emit()
+	await _frame()
+	await _frame()
+	_check(online_row.visible, "online panel appears in online mode")
+	_check(not undo_btn.visible and not restart_btn.visible,
+			"offline controls hide in online mode")
+	_check(not difficulty_row.visible and not badge.visible,
+			"AI controls hide in online mode")
+	_check(not resign_btn.visible and not rematch_btn.visible,
+			"resign/rematch wait for a live match")
+	_check(online_btn.button_pressed, "online toggle shows as pressed")
+	_check(not _app.auth.is_authenticated(),
+			"entering online mode creates no session offline")
+	_check(online_label.text == "Sign in to play online matches",
+			"online label asks for sign-in (got: %s)" % online_label.text)
+	_check(_aadu_save_ply() == save_before,
+			"entering online mode leaves the offline save untouched")
+	_check(not _app.online.is_connected_to_server(),
+			"no socket opens without a signed-in player")
+
+	hot_seat_btn.pressed.emit()
+	await _frame()
+	await _frame()
+	_check(not online_row.visible, "online panel hides when leaving online mode")
+	_check(undo_btn.visible and restart_btn.visible, "offline controls return")
+	_check(not online_btn.button_pressed, "online toggle releases")
+	_check(status.text == "Goats to move — place a goat",
+			"offline position restored after online mode (got: %s)"
+			% status.text)
+	_check(_aadu_save_ply() == save_before,
+			"the offline save is still untouched")
+
+
+## Phase 5 contract: vs-AI mode with Easy/Medium/Hard, a visible
+## thinking state, board-input isolation during the AI's turn, and
+## cancel/restart semantics. Assumes the Phase 4 block just left us in
+## hot seat mode on a fresh game (ply 0, goats to move).
+func _test_aadu_puli_ai(screen: Control, board: Control, status: Label,
+		undo_btn: Button) -> void:
+	var vs_ai_btn: Button = screen.get_node_or_null(
+			"Margin/Content/ModeRow/VsAiButton")
+	var hot_seat_btn: Button = screen.get_node_or_null(
+			"Margin/Content/ModeRow/HotSeatButton")
+	var difficulty_row: Control = screen.get_node_or_null(
+			"Margin/Content/DifficultyRow")
+	var badge: Control = screen.get_node_or_null(
+			"Margin/Content/ModeRow/AiBadge")
+	var badge_label: Label = screen.get_node_or_null(
+			"Margin/Content/ModeRow/AiBadge/AiBadgeRow/AiBadgeLabel")
+	var spinner: Control = screen.get_node_or_null(
+			"Margin/Content/ModeRow/AiBadge/AiBadgeRow/ThinkingSpinner")
+	var easy_btn: Button = screen.get_node_or_null(
+			"Margin/Content/DifficultyRow/EasyButton")
+	var medium_btn: Button = screen.get_node_or_null(
+			"Margin/Content/DifficultyRow/MediumButton")
+	var hard_btn: Button = screen.get_node_or_null(
+			"Margin/Content/DifficultyRow/HardButton")
+	var restart_btn: Button = screen.get_node_or_null(
+			"Margin/Content/Controls/RestartButton")
+	_check(vs_ai_btn != null and hot_seat_btn != null and difficulty_row != null
+			and badge != null and badge_label != null and spinner != null
+			and easy_btn != null and medium_btn != null and hard_btn != null
+			and restart_btn != null,
+			"vs-AI, difficulty and thinking-indicator controls exist")
+	if vs_ai_btn == null or hot_seat_btn == null or difficulty_row == null \
+			or badge == null or badge_label == null or spinner == null \
+			or easy_btn == null or medium_btn == null or hard_btn == null \
+			or restart_btn == null:
+		return
+	_check(not difficulty_row.visible and not badge.visible,
+			"AI controls are hidden in hot seat mode")
+
+	# Switch to vs-AI; the fresh game stays the human's turn.
+	vs_ai_btn.pressed.emit()
+	await _frame()
+	_check(vs_ai_btn.button_pressed and not hot_seat_btn.button_pressed,
+			"vs-AI mode toggles on")
+	_check(difficulty_row.visible and badge.visible,
+			"AI controls appear in vs-AI mode")
+	_check(not spinner.visible, "no thinking state before a move")
+	_check(_aadu_save_ply() == 0, "fresh position untouched by the mode switch")
+	easy_btn.pressed.emit()
+	await _frame()
+	_check(easy_btn.button_pressed, "easy difficulty selects")
+
+	# The AI answers the opening move.
+	board.emit_signal("point_activated", 7)
+	var ai_ply := _aadu_save_ply()
+	var frames := 0
+	while ai_ply < 2 and frames < 300:
+		await _frame()
+		ai_ply = _aadu_save_ply()
+		frames += 1
+	_check(ai_ply == 2, "the AI answers the opening move (ply %d)" % ai_ply)
+	_check(status.text.begins_with("Goats to move"),
+			"the turn returns to the human")
+	_check(not spinner.visible, "thinking indicator hides after the reply")
+	_check(not undo_btn.disabled, "undo stays available after the AI reply")
+	_check(badge_label.text == "AI: Easy", "badge shows the active difficulty")
+
+	# Undo in vs-AI mode rewinds the whole exchange (ply 2 -> 0).
+	undo_btn.pressed.emit()
+	await _frame()
+	_check(_aadu_save_ply() == 0,
+			"undo rewinds past the AI reply to the human turn")
+	_check(status.text == "Goats to move — place a goat",
+			"human to move after undo")
+	_check(undo_btn.disabled, "undo disables at the start again")
+
+	# Hard: a visible thinking state, and the board ignores input during it.
+	hard_btn.pressed.emit()
+	await _frame()
+	_check(hard_btn.button_pressed, "hard difficulty selects")
+	board.emit_signal("point_activated", 7)
+	await _frame()
+	_check(status.text == "Tigers are thinking…",
+			"thinking state while the AI searches")
+	_check(spinner.visible, "thinking spinner shows during the search")
+	_check(badge_label.text == "AI thinking…",
+			"badge shows the thinking state")
+	board.emit_signal("point_activated", 9)
+	await _frame()
+	_check(_aadu_save_ply() == 1, "board input is ignored while the AI thinks")
+	_check(board.selection == -1,
+			"no piece can be selected during the AI's turn")
+
+	# Switching difficulty cancels and restarts the search.
+	medium_btn.pressed.emit()
+	await _frame()
+	_check(status.text == "Tigers are thinking…",
+			"difficulty switch restarts the search")
+
+	# Switching to hot seat cancels the search outright.
+	hot_seat_btn.pressed.emit()
+	await _frame()
+	_check(status.text == "Tigers to move — step or jump",
+			"mode switch cancels the AI search")
+	_check(not badge.visible and not difficulty_row.visible,
+			"AI controls hide in hot seat mode")
+
+	# Back to vs-AI: restart cancels the pending search either way.
+	vs_ai_btn.pressed.emit()
+	await _frame()
+	_check(status.text == "Tigers are thinking…",
+			"returning to vs-AI resumes the search")
+	var confirm_dialog: Control = _main.get_node(
+			"DialogLayer/DialogRoot/ConfirmDialog")
+	restart_btn.pressed.emit()
+	await _frame()
+	_check(confirm_dialog != null and confirm_dialog.visible,
+			"restart confirmation opens")
+	if confirm_dialog == null:
+		return
+	confirm_dialog.resolve(false)  # decline: position kept, search resumes
+	await _frame()
+	await _frame()
+	_check(_aadu_save_ply() == 1, "declining restart keeps the position")
+	_check(status.text == "Tigers are thinking…",
+			"declined restart resumes the search")
+	restart_btn.pressed.emit()
+	await _frame()
+	confirm_dialog.resolve(true)  # accept: fresh game, no stray AI move
+	var stable := 0
+	frames = 0
+	while frames < 30:
+		await _frame()
+		frames += 1
+		if _aadu_save_ply() == 0:
+			stable += 1
+		else:
+			stable = 0
+	_check(stable >= 10,
+			"restart starts a fresh game and no stray AI move follows")
+	_check(status.text == "Goats to move — place a goat",
+			"fresh game is the human's turn")
+
+	# Tidy end state for anything that runs after this suite.
+	hot_seat_btn.pressed.emit()
+	await _frame()
+	_check(not badge.visible, "suite ends in hot seat mode")
 
 
 # ----------------------------------------------------------------------
@@ -161,6 +521,20 @@ func _scan_dir(path: String) -> void:
 
 func _frame() -> void:
 	await process_frame
+
+
+## The ply from the screen's save file (or -1 when missing/corrupt).
+func _aadu_save_ply() -> int:
+	if not FileAccess.file_exists("user://aadu_puli_save.json"):
+		return -1
+	var file := FileAccess.open("user://aadu_puli_save.json", FileAccess.READ)
+	if file == null:
+		return -1
+	var data: Variant = JSON.parse_string(file.get_as_text())
+	file.close()
+	if not (data is Dictionary) or not (data as Dictionary).has("ply"):
+		return -1
+	return int((data as Dictionary)["ply"])
 
 
 func _finish() -> void:

@@ -9,6 +9,12 @@ const cfg = {
     accessTtl: 900,
     refreshTtl: 2592000,
   },
+  coins: {
+    registrationBonus: 1000,
+    dailyLoginBonus: 100,
+    rewardedAdBonus: 500,
+    rewardedAdStandard: 100,
+  },
 };
 
 const baseUser = {
@@ -65,13 +71,20 @@ function makeAuth(
     verifyAsync: jest.fn().mockResolvedValue({ sub: 'u1', jti: 'jti-1' }),
   };
   const config = { get: jest.fn().mockReturnValue(cfg) };
-  const service = new AuthService(prisma as never, jwt as never, config as never);
-  return { service, prisma, jwt, user };
+  const wallet = {
+    credit: jest.fn().mockResolvedValue({
+      transaction: { id: 'tb-1' },
+      wallet: { balance: 1000 },
+      replayed: false,
+    }),
+  };
+  const service = new AuthService(prisma as never, jwt as never, config as never, wallet as never);
+  return { service, prisma, jwt, user, wallet };
 }
 
 describe('AuthService', () => {
   it('registers a user with a hashed password (never plaintext)', async () => {
-    const { service, prisma } = makeAuth();
+    const { service, prisma, wallet } = makeAuth();
     const { user, tokens } = await service.register({
       username: 'Player1',
       password: 'super-secret-1',
@@ -81,6 +94,21 @@ describe('AuthService', () => {
     expect(await bcrypt.compare('super-secret-1', user.passwordHash)).toBe(true);
     expect(tokens.accessToken).toBe('signed-token');
     expect(prisma.refreshToken.create).toHaveBeenCalled();
+  });
+
+  it('grants the configured registration bonus exactly once via the ledger', async () => {
+    const { service, wallet } = makeAuth();
+    await service.register({ username: 'Player1', password: 'super-secret-1' });
+
+    expect(wallet.credit).toHaveBeenCalledTimes(1);
+    expect(wallet.credit).toHaveBeenCalledWith(
+      expect.any(String),
+      1000,
+      expect.objectContaining({
+        type: 'REGISTRATION_BONUS',
+        idempotencyKey: expect.stringMatching(/^registration:/),
+      }),
+    );
   });
 
   it('rejects a duplicate username', async () => {

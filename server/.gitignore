@@ -5,3 +5,6 @@ coverage/
 .env.*
 !.env.example
 *.tsbuildinfo
+
+# Local development TLS material (self-signed, never commit)
+dev-certs/

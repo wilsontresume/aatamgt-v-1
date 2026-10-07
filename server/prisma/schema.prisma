@@ -34,6 +34,7 @@ model User {
   role          Role       @default(USER)
   status        UserStatus @default(ACTIVE)
   emailVerified Boolean    @default(false)
+  isGuest       Boolean    @default(false)
   lastLoginAt   DateTime?
   deletedAt     DateTime?
   createdAt     DateTime   @default(now())
@@ -81,12 +82,13 @@ model Profile {
 // ---------------------------------------------------------------------------
 
 enum WalletTxType {
-  DEPOSIT
-  WAGER
-  PAYOUT
-  DAILY_REWARD
-  BONUS
-  REFUND
+  REGISTRATION_BONUS
+  DAILY_LOGIN
+  REWARDED_AD
+  MATCH_REWARD
+  PURCHASE
+  COSMETIC_PURCHASE
+  ROYAL_PASS_BONUS
   ADMIN_ADJUSTMENT
 }
 

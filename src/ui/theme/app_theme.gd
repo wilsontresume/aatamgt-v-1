@@ -74,6 +74,15 @@ static func build() -> Theme:
 	t.set_type_variation("Card", "PanelContainer")
 	t.set_stylebox("panel", "Card", _box(C_CARD, C_BORDER, R_CARD, 20, 18))
 
+	# --- Text inputs ----------------------------------------------------
+	t.set_stylebox("normal", "LineEdit", _box(C_SURFACE, C_BORDER, R_BUTTON, 24, 15))
+	t.set_stylebox("focus", "LineEdit", _box(C_SURFACE, C_ACCENT, R_BUTTON, 24, 15))
+	t.set_stylebox("read_only", "LineEdit", _box(C_CARD, C_BORDER, R_BUTTON, 24, 15))
+	t.set_color("font_color", "LineEdit", C_TEXT)
+	t.set_color("font_placeholder_color", "LineEdit", C_TEXT_SECONDARY)
+	t.set_color("font_uneditable_color", "LineEdit", C_TEXT_SECONDARY)
+	t.set_font_size("font_size", "LineEdit", 17)
+
 	t.set_type_variation("Dialog", "PanelContainer")
 	t.set_stylebox("panel", "Dialog", _box(C_SURFACE, C_BORDER, R_DIALOG, 28, 24))
 

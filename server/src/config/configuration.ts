@@ -18,6 +18,16 @@ export interface AppConfig {
     authTtl: number;
     authLimit: number;
   };
+  match: {
+    turnTimeoutMs: number;
+    disconnectGraceMs: number;
+  };
+  coins: {
+    registrationBonus: number;
+    dailyLoginBonus: number;
+    rewardedAdBonus: number;
+    rewardedAdStandard: number;
+  };
   logLevel: string;
 }
 
@@ -44,6 +54,16 @@ export default registerAs<AppConfig>('app', () => {
       limit: num(process.env.THROTTLE_LIMIT, 100),
       authTtl: num(process.env.AUTH_THROTTLE_TTL, 60),
       authLimit: num(process.env.AUTH_THROTTLE_LIMIT, 10),
+    },
+    match: {
+      turnTimeoutMs: num(process.env.MATCH_TURN_TIMEOUT_MS, 60_000),
+      disconnectGraceMs: num(process.env.MATCH_DISCONNECT_GRACE_MS, 30_000),
+    },
+    coins: {
+      registrationBonus: num(process.env.COINS_REGISTRATION_BONUS, 1000),
+      dailyLoginBonus: num(process.env.COINS_DAILY_LOGIN_BONUS, 100),
+      rewardedAdBonus: num(process.env.COINS_REWARDED_AD_BONUS, 500),
+      rewardedAdStandard: num(process.env.COINS_REWARDED_AD_STANDARD, 100),
     },
     logLevel: process.env.LOG_LEVEL ?? 'info',
   };

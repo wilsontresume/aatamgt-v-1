@@ -19,13 +19,22 @@ describe('Wallet & daily rewards (integration)', () => {
     await app.close();
   });
 
-  it('starts with an empty coin wallet', async () => {
+  it('starts with the configured registration bonus in the ledger', async () => {
     const res = await request(app.getHttpServer())
       .get(`${apiPrefix(app)}/wallet`)
       .set(auth(token));
     expect(res.status).toBe(200);
-    expect(res.body.balance).toBe(0);
+    expect(res.body.balance).toBe(1000);
     expect(res.body.currency).toBe('COIN');
+
+    const txs = await request(app.getHttpServer())
+      .get(`${apiPrefix(app)}/wallet/transactions`)
+      .set(auth(token));
+    expect(txs.body.total).toBe(1);
+    expect(txs.body.items[0].type).toBe('REGISTRATION_BONUS');
+    expect(txs.body.items[0].amount).toBe(1000);
+    expect(txs.body.items[0].balanceAfter).toBe(1000);
+    expect(txs.body.items[0].refType).toBe('registration');
   });
 
   it('claims the daily reward exactly once per day', async () => {
@@ -33,9 +42,9 @@ describe('Wallet & daily rewards (integration)', () => {
       .post(`${apiPrefix(app)}/rewards/daily/claim`)
       .set(auth(token));
     expect(first.status).toBe(200);
-    expect(first.body.coins).toBe(50);
+    expect(first.body.coins).toBe(100);
     expect(first.body.streakDay).toBe(1);
-    expect(first.body.balance).toBe(50);
+    expect(first.body.balance).toBe(1100);
 
     const second = await request(app.getHttpServer())
       .post(`${apiPrefix(app)}/rewards/daily/claim`)
@@ -49,19 +58,22 @@ describe('Wallet & daily rewards (integration)', () => {
       .set(auth(token));
     expect(status.status).toBe(200);
     expect(status.body.todayClaimed).toBe(true);
+    expect(status.body.nextRewardCoins).toBe(100);
 
     const balance = await request(app.getHttpServer())
       .get(`${apiPrefix(app)}/wallet`)
       .set(auth(token));
-    expect(balance.body.balance).toBe(50);
+    expect(balance.body.balance).toBe(1100);
 
     const txs = await request(app.getHttpServer())
       .get(`${apiPrefix(app)}/wallet/transactions`)
       .set(auth(token));
     expect(txs.status).toBe(200);
-    expect(txs.body.total).toBe(1);
-    expect(txs.body.items[0].type).toBe('DAILY_REWARD');
-    expect(txs.body.items[0].balanceAfter).toBe(50);
+    expect(txs.body.total).toBe(2);
+    const daily = txs.body.items.find((row: { type: string }) => row.type === 'DAILY_LOGIN');
+    expect(daily).toBeDefined();
+    expect(daily.amount).toBe(100);
+    expect(daily.balanceAfter).toBe(1100);
   });
 
   it('creates a notification for the claimed reward', async () => {

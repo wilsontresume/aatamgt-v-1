@@ -32,7 +32,16 @@ export interface TransferResult {
   replayed: boolean;
 }
 
-const MAX_ATTEMPTS = 5;
+export interface IntegrityReport {
+  currency: string;
+  ok: boolean;
+  balance: number;
+  ledgerSum: number;
+  transactionCount: number;
+  issues: string[];
+}
+
+const MAX_ATTEMPTS = 10;
 
 @Injectable()
 export class WalletService {
@@ -66,6 +75,56 @@ export class WalletService {
       this.prisma.walletTransaction.count({ where }),
     ]);
     return { items, page: query.page, limit: query.limit, total };
+  }
+
+  /**
+   * Balance integrity check (Phase 7): replays the ledger in order and
+   * verifies that (a) every balanceAfter link chains correctly from an
+   * opening balance of 0, (b) the final link equals the wallet row, and
+   * (c) the plain sum of amounts equals the wallet balance. Any drift is
+   * reported as an issue — this is the audit tripwire for the coin economy.
+   */
+  async verifyIntegrity(userId: string, currency = 'COIN'): Promise<IntegrityReport> {
+    const wallet = await this.getOrCreate(userId, currency);
+    const rows = await this.prisma.walletTransaction.findMany({
+      where: { walletId: wallet.id },
+      orderBy: [{ createdAt: 'asc' }, { id: 'asc' }],
+    });
+
+    const issues: string[] = [];
+    let ledgerSum = 0;
+    let previousAfter: number | null = null;
+
+    rows.forEach((row, index) => {
+      ledgerSum += row.amount;
+      const expectedAfter =
+        previousAfter === null ? row.amount : previousAfter + row.amount;
+      if (row.balanceAfter !== expectedAfter) {
+        issues.push(
+          `ledger chain break at #${index} (${row.id}): expected balanceAfter ${expectedAfter}, found ${row.balanceAfter}`,
+        );
+      }
+      previousAfter = row.balanceAfter;
+    });
+
+    if (previousAfter !== null && previousAfter !== wallet.balance) {
+      issues.push(`ledger ends at ${previousAfter} but wallet balance is ${wallet.balance}`);
+    }
+    if (ledgerSum !== wallet.balance) {
+      issues.push(`sum of amounts is ${ledgerSum} but wallet balance is ${wallet.balance}`);
+    }
+    if (wallet.balance < 0) {
+      issues.push(`wallet balance is negative (${wallet.balance})`);
+    }
+
+    return {
+      currency: wallet.currency,
+      ok: issues.length === 0,
+      balance: wallet.balance,
+      ledgerSum,
+      transactionCount: rows.length,
+      issues,
+    };
   }
 
   async credit(userId: string, amount: number, input: Omit<TransferInput, 'userId' | 'amount'>) {

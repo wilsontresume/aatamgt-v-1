@@ -8,6 +8,12 @@ export interface MatchMoveEvent {
   userId: string;
   payload: unknown;
   at: string;
+  /** Aadu Puli: canonical notation of the accepted move. */
+  notation?: string;
+  /** Aadu Puli: full serialized state after the move (server truth). */
+  state?: unknown;
+  sideToMove?: 'goats' | 'tigers';
+  turnDeadlineAt?: string;
 }
 
 export interface MatchStatusEvent {
@@ -15,10 +21,32 @@ export interface MatchStatusEvent {
   status: string;
   stateVersion: number;
   at: string;
+  /** Present when the match reached a server-decided result. */
+  completed?: {
+    reason: 'RULES' | 'RESIGN' | 'TIMEOUT' | 'DISCONNECT';
+    winnerSeat: number | null;
+    results: Record<string, 'WIN' | 'LOSS' | 'DRAW'>;
+  };
+}
+
+export interface MatchPresenceEvent {
+  matchId: string;
+  userId: string;
+  connected: boolean;
+  at: string;
+}
+
+export interface MatchRematchEvent {
+  matchId: string;
+  newMatchId: string;
+  at: string;
 }
 
 export type MatchEvent =
-  { kind: 'move'; data: MatchMoveEvent } | { kind: 'status'; data: MatchStatusEvent };
+  | { kind: 'move'; data: MatchMoveEvent }
+  | { kind: 'status'; data: MatchStatusEvent }
+  | { kind: 'presence'; data: MatchPresenceEvent }
+  | { kind: 'rematch'; data: MatchRematchEvent };
 
 @Injectable()
 export class MatchEventsService {

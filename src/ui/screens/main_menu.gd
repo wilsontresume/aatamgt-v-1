@@ -8,7 +8,7 @@ extends Control
 
 
 func _ready() -> void:
-	_version_label.text = "v%s · Phase 1" % App.APP_VERSION
+	_version_label.text = "v%s · Phase 3" % App.APP_VERSION
 	_play_button.pressed.connect(func() -> void: App.navigation.go(&"game_selection"))
 	_profile_button.pressed.connect(func() -> void: App.navigation.go(&"profile"))
 	_settings_button.pressed.connect(func() -> void: App.navigation.go(&"settings"))

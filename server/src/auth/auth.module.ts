@@ -6,9 +6,10 @@ import { AuthService } from './auth.service';
 import { JwtRefreshGuard } from './jwt-refresh.guard';
 import { JwtRefreshStrategy } from './jwt-refresh.strategy';
 import { JwtStrategy } from './jwt.strategy';
+import { WalletModule } from '../wallet/wallet.module';
 
 @Module({
-  imports: [PassportModule, JwtModule.register({})],
+  imports: [PassportModule, JwtModule.register({}), WalletModule],
   controllers: [AuthController],
   providers: [AuthService, JwtStrategy, JwtRefreshStrategy, JwtRefreshGuard],
   exports: [AuthService],

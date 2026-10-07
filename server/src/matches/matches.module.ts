@@ -2,11 +2,12 @@ import { Module } from '@nestjs/common';
 import { GamesModule } from '../games/games.module';
 import { MatchesController } from './matches.controller';
 import { MatchesService } from './matches.service';
+import { MatchClockService } from './match-clock.service';
 
 @Module({
   imports: [GamesModule],
   controllers: [MatchesController],
-  providers: [MatchesService],
-  exports: [MatchesService],
+  providers: [MatchesService, MatchClockService],
+  exports: [MatchesService, MatchClockService],
 })
 export class MatchesModule {}

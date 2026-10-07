@@ -31,12 +31,12 @@ show_coins = true
 
 [node name="SubtitleLabel" type="Label" parent="Margin/Content"]
 theme_type_variation = "Caption"
-text = "Pick a game to play. All titles arrive in a later phase."
+text = "Pick a game to play. Aadu Puli Aattam is playable offline."
 
 [node name="AaduPuliCard" parent="Margin/Content" instance=ExtResource("3_card")]
 title_text = "Aadu Puli Aattam"
-subtitle_text = "Asymmetric hunt game · 2 players"
-badge_text = "Coming soon"
+subtitle_text = "Asymmetric hunt game · hot seat"
+badge_text = "Offline"
 
 [node name="SolahSeediCard" parent="Margin/Content" instance=ExtResource("3_card")]
 title_text = "Solah Seedi"

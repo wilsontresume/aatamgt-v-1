@@ -36,6 +36,11 @@ func set_offline() -> void:
 	_set_status(Status.OFFLINE)
 
 
+## Backend answered at least once over HTTPS — the API is reachable.
+func set_online() -> void:
+	_set_status(Status.CONNECTED)
+
+
 ## Phase 1 placeholder: no transport exists yet, so this reports OFFLINE
 ## instead of pretending to connect.
 func connect_to_server() -> void:

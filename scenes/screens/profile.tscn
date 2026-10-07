@@ -1,9 +1,10 @@
-[gd_scene load_steps=5 format=3]
+[gd_scene load_steps=6 format=3]
 
 [ext_resource type="Script" path="res://src/ui/screens/profile.gd" id="1_pf"]
 [ext_resource type="PackedScene" path="res://scenes/components/top_bar.tscn" id="2_tb"]
 [ext_resource type="PackedScene" path="res://scenes/components/player_profile.tscn" id="3_pp"]
 [ext_resource type="PackedScene" path="res://scenes/components/card.tscn" id="4_card"]
+[ext_resource type="PackedScene" path="res://scenes/components/button.tscn" id="5_btn"]
 
 [node name="Profile" type="Control"]
 anchor_right = 1.0
@@ -35,6 +36,28 @@ custom_minimum_size = Vector2(0, 24)
 
 [node name="ProfileDisplay" parent="Margin/Content/ProfileCenter" instance=ExtResource("3_pp")]
 avatar_size = 72
+
+[node name="AccountPanel" type="PanelContainer" parent="Margin/Content"]
+theme_type_variation = "Card"
+
+[node name="AccountBody" type="VBoxContainer" parent="Margin/Content/AccountPanel"]
+theme_override_constants/separation = 10
+
+[node name="AccountHeading" type="Label" parent="Margin/Content/AccountPanel/AccountBody"]
+theme_type_variation = "Heading"
+text = "Account"
+
+[node name="PlayerIdLabel" type="Label" parent="Margin/Content/AccountPanel/AccountBody"]
+theme_type_variation = "Body"
+text = "Player ID: —"
+
+[node name="AccountTypeLabel" type="Label" parent="Margin/Content/AccountPanel/AccountBody"]
+theme_type_variation = "Caption"
+text = "Not signed in"
+
+[node name="SignInButton" parent="Margin/Content/AccountPanel/AccountBody" instance=ExtResource("5_btn")]
+variant = 2
+text = "Sign in / Register"
 
 [node name="StatsTitle" type="Label" parent="Margin/Content"]
 theme_type_variation = "Heading"

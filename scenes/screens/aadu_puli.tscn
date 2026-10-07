@@ -1,0 +1,180 @@
+[gd_scene load_steps=6 format=3]
+
+[ext_resource type="Script" path="res://src/ui/screens/aadu_puli.gd" id="1_ap"]
+[ext_resource type="PackedScene" path="res://scenes/components/top_bar.tscn" id="2_tb"]
+[ext_resource type="PackedScene" path="res://scenes/components/button.tscn" id="3_btn"]
+[ext_resource type="Script" path="res://src/ui/games/aadu_puli_board.gd" id="4_bd"]
+[ext_resource type="Script" path="res://src/ui/components/ui_spinner.gd" id="5_sp"]
+
+[node name="AaduPuliScreen" type="Control"]
+anchor_right = 1.0
+anchor_bottom = 1.0
+grow_horizontal = 2
+grow_vertical = 2
+script = ExtResource("1_ap")
+
+[node name="Margin" type="MarginContainer" parent="."]
+anchor_right = 1.0
+anchor_bottom = 1.0
+grow_horizontal = 2
+grow_vertical = 2
+theme_override_constants/margin_left = 24
+theme_override_constants/margin_top = 20
+theme_override_constants/margin_right = 24
+theme_override_constants/margin_bottom = 24
+
+[node name="Content" type="VBoxContainer" parent="Margin"]
+theme_override_constants/separation = 12
+
+[node name="TopBar" parent="Margin/Content" instance=ExtResource("2_tb")]
+title = "Aadu Puli Aattam"
+show_back = true
+show_coins = false
+
+[node name="ModeRow" type="HBoxContainer" parent="Margin/Content"]
+theme_override_constants/separation = 8
+
+[node name="OpponentLabel" type="Label" parent="Margin/Content/ModeRow"]
+theme_type_variation = "Caption"
+size_flags_vertical = 4
+text = "Opponent"
+
+[node name="VsAiButton" parent="Margin/Content/ModeRow" instance=ExtResource("3_btn")]
+custom_minimum_size = Vector2(0, 40)
+variant = 2
+text = "Vs AI"
+toggle_mode = true
+button_pressed = true
+
+[node name="HotSeatButton" parent="Margin/Content/ModeRow" instance=ExtResource("3_btn")]
+custom_minimum_size = Vector2(0, 40)
+variant = 2
+text = "Hot seat"
+toggle_mode = true
+
+[node name="OnlineButton" parent="Margin/Content/ModeRow" instance=ExtResource("3_btn")]
+custom_minimum_size = Vector2(0, 40)
+variant = 2
+text = "Online"
+toggle_mode = true
+
+[node name="ModeSpacer" type="Control" parent="Margin/Content/ModeRow"]
+size_flags_horizontal = 3
+
+[node name="AiBadge" type="PanelContainer" parent="Margin/Content/ModeRow"]
+theme_type_variation = "Badge"
+size_flags_vertical = 4
+
+[node name="AiBadgeRow" type="HBoxContainer" parent="Margin/Content/ModeRow/AiBadge"]
+theme_override_constants/separation = 6
+
+[node name="AiBadgeLabel" type="Label" parent="Margin/Content/ModeRow/AiBadge/AiBadgeRow"]
+theme_type_variation = "Caption"
+text = "AI: Medium"
+
+[node name="ThinkingSpinner" type="Control" parent="Margin/Content/ModeRow/AiBadge/AiBadgeRow"]
+custom_minimum_size = Vector2(16, 16)
+size_flags_vertical = 4
+visible = false
+script = ExtResource("5_sp")
+
+[node name="OnlineRow" type="VBoxContainer" parent="Margin/Content"]
+theme_override_constants/separation = 8
+visible = false
+
+[node name="OnlineActions" type="HBoxContainer" parent="Margin/Content/OnlineRow"]
+theme_override_constants/separation = 8
+
+[node name="NewMatchButton" parent="Margin/Content/OnlineRow/OnlineActions" instance=ExtResource("3_btn")]
+custom_minimum_size = Vector2(0, 40)
+variant = 2
+text = "New match"
+
+[node name="JoinButton" parent="Margin/Content/OnlineRow/OnlineActions" instance=ExtResource("3_btn")]
+custom_minimum_size = Vector2(0, 40)
+variant = 2
+text = "Join"
+
+[node name="MatchIdField" type="LineEdit" parent="Margin/Content/OnlineRow/OnlineActions"]
+custom_minimum_size = Vector2(0, 40)
+size_flags_horizontal = 3
+size_flags_vertical = 4
+placeholder_text = "Match code"
+max_length = 64
+clear_button_enabled = true
+
+[node name="OnlineStatusLabel" type="Label" parent="Margin/Content/OnlineRow"]
+theme_type_variation = "Caption"
+autowrap_mode = 3
+text = "Sign in to play online matches"
+
+[node name="DifficultyRow" type="HBoxContainer" parent="Margin/Content"]
+theme_override_constants/separation = 8
+
+[node name="DifficultyLabel" type="Label" parent="Margin/Content/DifficultyRow"]
+theme_type_variation = "Caption"
+size_flags_vertical = 4
+text = "Difficulty"
+
+[node name="EasyButton" parent="Margin/Content/DifficultyRow" instance=ExtResource("3_btn")]
+custom_minimum_size = Vector2(0, 40)
+variant = 2
+text = "Easy"
+toggle_mode = true
+
+[node name="MediumButton" parent="Margin/Content/DifficultyRow" instance=ExtResource("3_btn")]
+custom_minimum_size = Vector2(0, 40)
+variant = 2
+text = "Medium"
+toggle_mode = true
+button_pressed = true
+
+[node name="HardButton" parent="Margin/Content/DifficultyRow" instance=ExtResource("3_btn")]
+custom_minimum_size = Vector2(0, 40)
+variant = 2
+text = "Hard"
+toggle_mode = true
+
+[node name="DifficultySpacer" type="Control" parent="Margin/Content/DifficultyRow"]
+size_flags_horizontal = 3
+
+[node name="StatusLabel" type="Label" parent="Margin/Content"]
+theme_type_variation = "Heading"
+text = "Goats to move — place a goat"
+
+[node name="DetailLabel" type="Label" parent="Margin/Content"]
+theme_type_variation = "Caption"
+text = "Captured 0/5  ·  Move 1  ·  15 in hand"
+
+[node name="Board" type="Control" parent="Margin/Content"]
+custom_minimum_size = Vector2(0, 360)
+size_flags_vertical = 3
+script = ExtResource("4_bd")
+
+[node name="Controls" type="HBoxContainer" parent="Margin/Content"]
+theme_override_constants/separation = 12
+
+[node name="UndoButton" parent="Margin/Content/Controls" instance=ExtResource("3_btn")]
+variant = 1
+text = "Undo"
+
+[node name="RestartButton" parent="Margin/Content/Controls" instance=ExtResource("3_btn")]
+variant = 1
+text = "Restart"
+
+[node name="ResignButton" parent="Margin/Content/Controls" instance=ExtResource("3_btn")]
+variant = 3
+text = "Resign"
+visible = false
+
+[node name="RematchButton" parent="Margin/Content/Controls" instance=ExtResource("3_btn")]
+variant = 1
+text = "Rematch"
+visible = false
+
+[node name="HintLabel" type="Label" parent="Margin/Content/Controls"]
+theme_type_variation = "Caption"
+size_flags_horizontal = 3
+size_flags_vertical = 4
+text = "Hot seat · pass and play"
+horizontal_alignment = 2

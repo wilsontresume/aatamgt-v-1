@@ -111,16 +111,19 @@ describe('Auth rate limiting (integration)', () => {
   });
 
   it('returns 429 once the login throttle limit is exceeded', async () => {
+    // The effective limit comes from AUTH_THROTTLE_LIMIT (setup-env.ts).
+    const limit = Number(process.env.AUTH_THROTTLE_LIMIT ?? 10);
     const statuses: number[] = [];
-    for (let i = 0; i < 7; i++) {
+    for (let i = 0; i < limit + 3; i++) {
       const res = await request(app.getHttpServer())
         .post(`${apiPrefix(app)}/auth/login`)
         .send({ identifier: 'nobody', password: 'whatever' });
       statuses.push(res.status);
     }
-    expect(statuses.slice(0, 5)).toEqual([401, 401, 401, 401, 401]);
-    expect(statuses[5]).toBe(429);
-    expect(statuses[6]).toBe(429);
+    expect(statuses.slice(0, limit)).toEqual(Array(limit).fill(401));
+    expect(statuses[limit]).toBe(429);
+    expect(statuses[limit + 1]).toBe(429);
+    expect(statuses[limit + 2]).toBe(429);
   });
 
   it('keeps other endpoints available while throttled', async () => {

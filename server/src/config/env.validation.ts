@@ -1,4 +1,4 @@
-import { IsIn, IsInt, IsOptional, IsString, MinLength, validateSync } from 'class-validator';
+import { IsIn, IsInt, IsOptional, IsString, Min, MinLength, validateSync } from 'class-validator';
 
 export class EnvironmentVariables {
   @IsIn(['development', 'test', 'production'])
@@ -45,6 +45,34 @@ export class EnvironmentVariables {
 
   @IsIn(['fatal', 'error', 'warn', 'info', 'debug', 'trace', 'silent'])
   LOG_LEVEL: string;
+
+  @IsOptional()
+  @IsInt()
+  MATCH_TURN_TIMEOUT_MS: number;
+
+  @IsOptional()
+  @IsInt()
+  MATCH_DISCONNECT_GRACE_MS: number;
+
+  @IsOptional()
+  @IsInt()
+  @Min(0)
+  COINS_REGISTRATION_BONUS: number;
+
+  @IsOptional()
+  @IsInt()
+  @Min(0)
+  COINS_DAILY_LOGIN_BONUS: number;
+
+  @IsOptional()
+  @IsInt()
+  @Min(0)
+  COINS_REWARDED_AD_BONUS: number;
+
+  @IsOptional()
+  @IsInt()
+  @Min(0)
+  COINS_REWARDED_AD_STANDARD: number;
 }
 
 const defaults: Record<string, unknown> = {
@@ -78,6 +106,12 @@ export function validate(config: Record<string, unknown>): EnvironmentVariables 
     THROTTLE_LIMIT: toNumber(config.THROTTLE_LIMIT, 100),
     AUTH_THROTTLE_TTL: toNumber(config.AUTH_THROTTLE_TTL, 60),
     AUTH_THROTTLE_LIMIT: toNumber(config.AUTH_THROTTLE_LIMIT, 10),
+    MATCH_TURN_TIMEOUT_MS: toNumber(config.MATCH_TURN_TIMEOUT_MS, 60_000),
+    MATCH_DISCONNECT_GRACE_MS: toNumber(config.MATCH_DISCONNECT_GRACE_MS, 30_000),
+    COINS_REGISTRATION_BONUS: toNumber(config.COINS_REGISTRATION_BONUS, 1000),
+    COINS_DAILY_LOGIN_BONUS: toNumber(config.COINS_DAILY_LOGIN_BONUS, 100),
+    COINS_REWARDED_AD_BONUS: toNumber(config.COINS_REWARDED_AD_BONUS, 500),
+    COINS_REWARDED_AD_STANDARD: toNumber(config.COINS_REWARDED_AD_STANDARD, 100),
   };
 
   const instance = new EnvironmentVariables();

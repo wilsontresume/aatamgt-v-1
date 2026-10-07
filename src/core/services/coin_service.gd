@@ -1,10 +1,15 @@
 class_name CoinService
 extends RefCounted
-## Placeholder coin balance service (Phase 1 — display only).
+## Display-only coin balance (Phase 7: server-authoritative wallet).
 ##
-## Phase 2+: the balance is a projection of the server-side ledger.
-## The client NEVER mints, spends or validates coins; it only reflects
-## values delivered by the authoritative backend.
+## The balance is a projection of the server-side ledger. The ONLY
+## writer is set_balance_from_server(), which is fed exclusively from
+## backend payloads (GET /wallet via App.refresh_wallet, and the
+## sign-out reset). The client NEVER mints, spends or validates coins —
+## every grant (REGISTRATION_BONUS, DAILY_LOGIN, REWARDED_AD,
+## MATCH_REWARD, ROYAL_PASS_BONUS, ADMIN_ADJUSTMENT) and every spend
+## (PURCHASE, COSMETIC_PURCHASE) is decided and recorded server-side
+## in the wallet transaction ledger.
 
 signal balance_changed(current: int, previous: int)
 
@@ -15,8 +20,8 @@ func get_balance() -> int:
 	return _balance
 
 
-## Entry point for server-delivered balances (Phase 2).
-## In Phase 1 nothing calls this, so the UI honestly shows 0.
+## Sole entry point for balance updates: a value the server reported.
+## There is deliberately no add/subtract/set API on this service.
 func set_balance_from_server(value: int) -> void:
 	value = maxi(0, value)
 	if value == _balance:
@@ -24,7 +29,3 @@ func set_balance_from_server(value: int) -> void:
 	var previous := _balance
 	_balance = value
 	balance_changed.emit(_balance, previous)
-
-
-# Phase 2 TODO: subscribe to wallet updates over WebSocket, and reconcile
-# after reconnect using the backend wallet endpoint.

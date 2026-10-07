@@ -23,7 +23,7 @@ const player = (userId: string, seat: number) => ({
 const matchRow = (overrides: Record<string, unknown> = {}) => ({
   id: 'm1',
   gameId: 'g1',
-  gameKey: 'aadu-puli-aattam',
+  gameKey: 'fixture-game',
   status: 'PENDING',
   mode: 'CASUAL',
   stateVersion: 0,
@@ -73,8 +73,28 @@ function makeMatches(
   };
   const games = { getByKey: jest.fn().mockResolvedValue(game) };
   const events = { publish: jest.fn() };
-  const service = new MatchesService(prisma as never, games as never, events as never);
-  return { service, prisma, games, events };
+  const clock = {
+    armTurn: jest.fn(),
+    disarmTurn: jest.fn(),
+    disarmMatch: jest.fn(),
+    armDisconnect: jest.fn(),
+    disarmDisconnect: jest.fn(),
+    hasDisconnect: jest.fn().mockReturnValue(false),
+  };
+  const config = {
+    get: jest.fn().mockReturnValue({
+      match: { turnTimeoutMs: 60_000, disconnectGraceMs: 30_000 },
+    }),
+  };
+  prisma.$queryRaw = jest.fn().mockResolvedValue([]);
+  const service = new MatchesService(
+    prisma as never,
+    games as never,
+    events as never,
+    clock as never,
+    config as never,
+  );
+  return { service, prisma, games, events, clock, config };
 }
 
 describe('MatchesService', () => {

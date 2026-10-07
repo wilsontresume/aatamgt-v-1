@@ -7,12 +7,27 @@ import { CurrentUser, AuthUser } from '../common/decorators/current-user.decorat
 import { toPublicUser } from '../common/utils/user-view';
 import { LoginDto, RefreshDto, RegisterDto } from './dto/auth.dto';
 
+/** Small helper so AUTH_THROTTLE_* env vars actually reach these routes. */
+function authThrottle(fallbackLimit: number) {
+  const limit = Number(process.env.AUTH_THROTTLE_LIMIT);
+  const ttl = Number(process.env.AUTH_THROTTLE_TTL);
+  return {
+    default: {
+      limit: Number.isFinite(limit) && limit > 0 ? limit : fallbackLimit,
+      ttl: (Number.isFinite(ttl) && ttl > 0 ? ttl : 60) * 1000,
+    },
+  };
+}
+
+const REGISTER_THROTTLE = authThrottle(10);
+const LOGIN_THROTTLE = authThrottle(10);
+
 @Controller('auth')
 export class AuthController {
   constructor(private readonly auth: AuthService) {}
 
   @Public()
-  @Throttle({ default: { limit: 5, ttl: 60_000 } })
+  @Throttle(REGISTER_THROTTLE)
   @Post('register')
   async register(@Body() dto: RegisterDto) {
     const { user, tokens } = await this.auth.register(dto);
@@ -20,7 +35,15 @@ export class AuthController {
   }
 
   @Public()
-  @Throttle({ default: { limit: 5, ttl: 60_000 } })
+  @Throttle(LOGIN_THROTTLE)
+  @Post('guest')
+  async guest() {
+    const { user, tokens } = await this.auth.guestLogin();
+    return { user: toPublicUser(user), ...tokens };
+  }
+
+  @Public()
+  @Throttle(LOGIN_THROTTLE)
   @HttpCode(200)
   @Post('login')
   async login(@Body() dto: LoginDto) {

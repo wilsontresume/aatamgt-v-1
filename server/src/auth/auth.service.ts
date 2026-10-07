@@ -7,8 +7,10 @@ import {
 import { ConfigService } from '@nestjs/config';
 import { JwtService } from '@nestjs/jwt';
 import { User } from '@prisma/client';
-import { randomUUID } from 'node:crypto';
+import { randomBytes, randomUUID } from 'node:crypto';
+import { Prisma } from '@prisma/client';
 import { PrismaService } from '../prisma/prisma.service';
+import { WalletService } from '../wallet/wallet.service';
 import { sha256 } from '../common/crypto.service';
 import { AppConfig } from '../config/configuration';
 import { LoginDto, RegisterDto } from './dto/auth.dto';
@@ -41,6 +43,7 @@ export class AuthService {
     private readonly prisma: PrismaService,
     private readonly jwt: JwtService,
     private readonly config: ConfigService,
+    private readonly wallet: WalletService,
   ) {
     this.cfg = this.config.get<AppConfig>('app') as AppConfig;
   }
@@ -74,6 +77,53 @@ export class AuthService {
       return created;
     });
 
+    // Phase 7: welcome grant. Server-computed, idempotent per user — the
+    // client never asks for a specific amount and cannot replay it.
+    await this.wallet.credit(user.id, this.cfg.coins.registrationBonus, {
+      type: 'REGISTRATION_BONUS',
+      refType: 'registration',
+      refId: user.id,
+      idempotencyKey: `registration:${user.id}`,
+      memo: 'Registration bonus',
+    });
+
+    const tokens = await this.issueTokens(user);
+    return { user, tokens };
+  }
+
+  /**
+   * Guest sign-in: creates a throwaway account server-side. The generated
+   * password is random, hashed, and never returned to the client — the client
+   * only ever receives session tokens.
+   */
+  async guestLogin(): Promise<{ user: User; tokens: TokenPair }> {
+    const passwordHash = await bcrypt.hash(randomBytes(32).toString('base64url'), SALT_ROUNDS);
+    let user: User | null = null;
+
+    for (let attempt = 0; attempt < 4 && !user; attempt++) {
+      const username = `guest_${randomUUID().replace(/-/g, '').slice(0, 8)}`;
+      try {
+        user = await this.prisma.$transaction(
+          async (tx) =>
+            tx.user.create({
+              data: {
+                username,
+                passwordHash,
+                isGuest: true,
+                profile: { create: { displayName: `Guest ${username.slice(-4).toUpperCase()}` } },
+                wallets: { create: { currency: 'COIN', balance: 0 } },
+              },
+            }),
+        );
+      } catch (error) {
+        if (error instanceof Prisma.PrismaClientKnownRequestError && error.code === 'P2002') {
+          continue;
+        }
+        throw error;
+      }
+    }
+
+    if (!user) throw new ConflictException('Could not allocate a guest username');
     const tokens = await this.issueTokens(user);
     return { user, tokens };
   }

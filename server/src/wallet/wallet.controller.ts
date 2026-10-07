@@ -18,6 +18,11 @@ export class WalletController {
     };
   }
 
+  @Get('integrity')
+  async integrity(@CurrentUser() auth: AuthUser) {
+    return this.wallet.verifyIntegrity(auth.id);
+  }
+
   @Get('transactions')
   async transactions(@CurrentUser() auth: AuthUser, @Query() query: PaginationQuery) {
     const page = await this.wallet.listTransactions(auth.id, query);

@@ -7,6 +7,7 @@ export interface PublicUser {
   role: string;
   status: string;
   emailVerified: boolean;
+  isGuest: boolean;
   lastLoginAt: string | null;
   createdAt: string;
 }
@@ -19,6 +20,7 @@ export function toPublicUser(user: User): PublicUser {
     role: user.role,
     status: user.status,
     emailVerified: user.emailVerified,
+    isGuest: user.isGuest,
     lastLoginAt: user.lastLoginAt?.toISOString() ?? null,
     createdAt: user.createdAt.toISOString(),
   };

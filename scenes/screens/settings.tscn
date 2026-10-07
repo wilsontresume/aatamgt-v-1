@@ -71,13 +71,13 @@ theme_type_variation = "Heading"
 text = "Account"
 
 [node name="SignInButton" parent="Margin/Content/AccountPanel/AccountBody" instance=ExtResource("3_btn")]
-disabled = true
 variant = 1
 text = "Sign in / Register"
 
 [node name="AccountHint" type="Label" parent="Margin/Content/AccountPanel/AccountBody"]
 theme_type_variation = "Caption"
-text = "Guest play is active. Accounts arrive in a later phase."
+autowrap_mode = 3
+text = "Sign in to keep your progress, or keep playing as a guest."
 
 [node name="AboutPanel" type="PanelContainer" parent="Margin/Content"]
 theme_type_variation = "Card"

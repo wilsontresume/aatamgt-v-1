@@ -57,5 +57,43 @@ func get_stats() -> Dictionary:
 	return stats.duplicate() if stats is Dictionary else {}
 
 
+func get_player_id() -> String:
+	return str(_profile.get("id", ""))
+
+
+## Applies the authoritative user delivered by an authenticated session
+## (guest, registration, login, or session restore).
+func apply_session_user(session_user: Dictionary) -> void:
+	if _profile.is_empty():
+		initialize_local_placeholder()
+	var fallback := str(session_user.get("username", PLACEHOLDER_NAME))
+	var display_name := str(session_user.get("display_name", fallback))
+	if display_name.is_empty():
+		display_name = fallback
+	_profile["id"] = str(session_user.get("id", ""))
+	_profile["display_name"] = display_name
+	_profile["is_guest"] = bool(session_user.get("is_guest", false))
+	_profile["avatar_text"] = display_name.left(1).to_upper()
+	if session_user.has("level"):
+		_profile["level"] = int(session_user["level"])
+	if session_user.has("xp"):
+		_profile["xp"] = int(session_user["xp"])
+	var stats: Variant = session_user.get("stats", {})
+	if stats is Dictionary:
+		_profile["stats"] = stats.duplicate(true)
+	profile_changed.emit(get_profile())
+
+
+## Back to the local guest placeholder after sign-out or session expiry.
+func apply_signed_out() -> void:
+	if _profile.is_empty():
+		initialize_local_placeholder()
+	_profile["id"] = ""
+	_profile["display_name"] = PLACEHOLDER_NAME
+	_profile["is_guest"] = true
+	_profile["avatar_text"] = PLACEHOLDER_NAME.left(1).to_upper()
+	profile_changed.emit(get_profile())
+
+
 # Phase 2 TODO: fetch profile from backend on login, subscribe to profile
 # update events, and implement avatar upload + display-name editing.

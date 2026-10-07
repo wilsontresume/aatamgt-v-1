@@ -25,7 +25,7 @@ process.env.JWT_REFRESH_TTL = '2592000';
 process.env.THROTTLE_TTL = '60';
 process.env.THROTTLE_LIMIT = '1000';
 process.env.AUTH_THROTTLE_TTL = '60';
-process.env.AUTH_THROTTLE_LIMIT = '1000';
+process.env.AUTH_THROTTLE_LIMIT = '20';
 process.env.CORS_ORIGINS = 'http://localhost:3000';
 
 const testDatabaseUrl = process.env.TEST_DATABASE_URL;

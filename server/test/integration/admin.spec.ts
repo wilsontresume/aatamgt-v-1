@@ -62,7 +62,7 @@ describe('Admin (integration)', () => {
       .set(auth(adminToken))
       .send({ amount: 250, memo: 'phase 2 test grant' });
     expect(adjust.status).toBe(201);
-    expect(adjust.body.balance).toBe(250);
+    expect(adjust.body.balance).toBe(1250); // 1000 registration bonus + 250 adjustment
 
     const audit = await request(app.getHttpServer())
       .get(`${apiPrefix(app)}/admin/audit`)

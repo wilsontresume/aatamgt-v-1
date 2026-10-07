@@ -81,4 +81,29 @@ export class MatchesController {
   async move(@CurrentUser() auth: AuthUser, @Param('id') id: string, @Body() dto: SubmitMoveBody) {
     return this.matches.submitMove(auth.id, id, dto);
   }
+
+  /** Server-decided resignation: the opponent wins, both records update. */
+  @Post(':id/resign')
+  @HttpCode(200)
+  async resign(@CurrentUser() auth: AuthUser, @Param('id') id: string) {
+    const outcome = await this.matches.resign(auth.id, id);
+    return {
+      ok: true,
+      matchId: id,
+      stateVersion: outcome.stateVersion,
+      completed: {
+        reason: outcome.completion.reason,
+        winnerSeat: outcome.completion.winnerSeat,
+        results: Object.fromEntries(outcome.results),
+      },
+    };
+  }
+
+  /** Starts a fresh match with swapped seats; idempotent per match. */
+  @Post(':id/rematch')
+  @HttpCode(200)
+  async rematch(@CurrentUser() auth: AuthUser, @Param('id') id: string) {
+    const match = await this.matches.rematch(auth.id, id);
+    return this.matches.serialize(match);
+  }
 }

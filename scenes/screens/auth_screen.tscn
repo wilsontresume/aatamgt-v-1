@@ -1,0 +1,78 @@
+[gd_scene load_steps=4 format=3]
+
+[ext_resource type="Script" path="res://src/ui/screens/auth_screen.gd" id="1_as"]
+[ext_resource type="PackedScene" path="res://scenes/components/top_bar.tscn" id="2_tb"]
+[ext_resource type="PackedScene" path="res://scenes/components/button.tscn" id="3_btn"]
+
+[node name="AuthScreen" type="Control"]
+anchor_right = 1.0
+anchor_bottom = 1.0
+grow_horizontal = 2
+grow_vertical = 2
+script = ExtResource("1_as")
+
+[node name="Margin" type="MarginContainer" parent="."]
+anchor_right = 1.0
+anchor_bottom = 1.0
+grow_horizontal = 2
+grow_vertical = 2
+theme_override_constants/margin_left = 24
+theme_override_constants/margin_top = 20
+theme_override_constants/margin_right = 24
+theme_override_constants/margin_bottom = 24
+
+[node name="Content" type="VBoxContainer" parent="Margin"]
+theme_override_constants/separation = 16
+
+[node name="TopBar" parent="Margin/Content" instance=ExtResource("2_tb")]
+title = "Account"
+show_back = true
+show_coins = false
+
+[node name="AuthPanel" type="PanelContainer" parent="Margin/Content"]
+theme_type_variation = "Card"
+
+[node name="AuthBody" type="VBoxContainer" parent="Margin/Content/AuthPanel"]
+theme_override_constants/separation = 14
+
+[node name="HeadingLabel" type="Label" parent="Margin/Content/AuthPanel/AuthBody"]
+theme_type_variation = "Heading"
+text = "Sign in"
+
+[node name="SubtitleLabel" type="Label" parent="Margin/Content/AuthPanel/AuthBody"]
+theme_type_variation = "Caption"
+autowrap_mode = 3
+text = "Sign in to keep your progress across devices."
+
+[node name="UsernameField" type="LineEdit" parent="Margin/Content/AuthPanel/AuthBody"]
+custom_minimum_size = Vector2(0, 56)
+placeholder_text = "Username"
+max_length = 24
+clear_button_enabled = true
+
+[node name="PasswordField" type="LineEdit" parent="Margin/Content/AuthPanel/AuthBody"]
+custom_minimum_size = Vector2(0, 56)
+placeholder_text = "Password"
+secret = true
+max_length = 72
+
+[node name="ErrorLabel" type="Label" parent="Margin/Content/AuthPanel/AuthBody"]
+theme_type_variation = "Caption"
+theme_override_colors/font_color = Color(0.898, 0.282, 0.302, 1)
+autowrap_mode = 3
+visible = false
+text = ""
+
+[node name="SubmitButton" parent="Margin/Content/AuthPanel/AuthBody" instance=ExtResource("3_btn")]
+text = "Sign in"
+
+[node name="SwitchButton" parent="Margin/Content/AuthPanel/AuthBody" instance=ExtResource("3_btn")]
+variant = 2
+text = "New here? Create an account"
+
+[node name="GuestButton" parent="Margin/Content/AuthPanel/AuthBody" instance=ExtResource("3_btn")]
+variant = 2
+text = "Continue as guest"
+
+[node name="Spacer" type="Control" parent="Margin/Content"]
+size_flags_vertical = 3
