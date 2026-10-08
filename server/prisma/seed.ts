@@ -19,7 +19,8 @@ const GAMES = [
     key: 'solah-seedi',
     name: 'Solah Seedi',
     slug: 'solah-seedi',
-    description: '16 Soldiers — classic war game. Rules ship in a later phase.',
+    description:
+      '16 Soldiers — classic war game for 2 players on a 37-point board. Capture every enemy piece or break through their triangle.',
     minPlayers: 2,
     maxPlayers: 2,
   },

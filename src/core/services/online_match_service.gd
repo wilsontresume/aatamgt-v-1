@@ -1,13 +1,15 @@
 class_name OnlineMatchService
 extends Node
-## Authoritative online match session for Aadu Puli Aattam.
+## Authoritative online match session (Phase 6), shared by every game
+## screen: set_game_key() points the one service at the game being
+## played — the session itself (REST lifecycle + WebSocket) is never
+## duplicated per game.
 ##
-## Contract (Phase 6): the server decides everything — legality, turn
-## order, results, rating, coins. This service only moves bytes: REST
-## for match lifecycle (create/join/list), WebSocket for the live
-## session (subscribe/move/resign/rematch + broadcasts). Engine state
-## written here always comes FROM the server; nothing is computed
-## locally.
+## Contract: the server decides everything — legality, turn order,
+## results, rating, coins. This service only moves bytes: REST for
+## match lifecycle (create/join/list), WebSocket for the live session
+## (subscribe/move/resign/rematch + broadcasts). Engine state written
+## here always comes FROM the server; nothing is computed locally.
 
 signal connection_changed(connected: bool)
 signal match_changed                      # subscription or seat switched
@@ -17,8 +19,14 @@ signal match_completed(data: Dictionary)  # server-decided completion, once
 signal presence_updated(data: Dictionary)
 signal rematch_available(new_match_id: String)
 
-const GAME_KEY := "aadu-puli-aattam"
+## Game keys as published by the server catalog.
+const AADU_PULI_KEY := "aadu-puli-aattam"
+const SOLAH_SEEDI_KEY := "solah-seedi"
+const DEFAULT_GAME_KEY := AADU_PULI_KEY
 const ACK_TIMEOUT := 6.0
+
+## The game this session is currently pointed at (see set_game_key).
+var game_key := DEFAULT_GAME_KEY
 
 var api: ApiClient
 var auth: AuthService
@@ -47,6 +55,17 @@ var _announced_match := ""      # match ids whose completion was emitted
 func _init(p_api: ApiClient = null, p_auth: AuthService = null) -> void:
 	api = p_api
 	auth = p_auth
+
+
+## Points the session at another game: any live session of the previous
+## game is dropped first (the server keeps the match; it can be
+## resumed under its own key later). No-op when the key is unchanged.
+func set_game_key(key: String) -> void:
+	if game_key == key:
+		return
+	if not match_id.is_empty() or _wants_connection:
+		leave()
+	game_key = key
 
 
 func _enter_tree() -> void:
@@ -135,7 +154,7 @@ func leave() -> void:
 ## Server-generated match id; the creator waits in PENDING.
 func create_match() -> Dictionary:
 	var res: Dictionary = await api.request_json(HTTPClient.METHOD_POST,
-			"/matches", {"gameKey": GAME_KEY}, auth.get_access_token())
+			"/matches", {"gameKey": game_key}, auth.get_access_token())
 	if not res.ok:
 		return _rest_fail(res)
 	var body: Dictionary = res.body
@@ -174,7 +193,7 @@ func find_resumable_match() -> Dictionary:
 			if not (entry is Dictionary):
 				continue
 			var m := entry as Dictionary
-			if str(m.get("gameKey", "")) != GAME_KEY:
+			if str(m.get("gameKey", "")) != game_key:
 				continue
 			var status := str(m.get("status", ""))
 			if status == "PENDING" or status == "ACTIVE":

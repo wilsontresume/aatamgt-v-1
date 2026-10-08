@@ -11,6 +11,7 @@ const SCREEN_ROOT_NAMES := {
 	&"settings": "Settings",
 	&"auth": "AuthScreen",
 	&"aadu_puli": "AaduPuliScreen",
+	&"solah_seedi": "SolahSeediScreen",
 }
 
 var _checks := 0
@@ -42,6 +43,12 @@ func _run() -> void:
 		var game_dir := DirAccess.open("user://")
 		if game_dir != null:
 			game_dir.remove("aadu_puli_save.json")
+
+	# Phase 9: same for the stored Solah Seedi position.
+	if FileAccess.file_exists("user://solah_seedi_save.json"):
+		var solah_dir := DirAccess.open("user://")
+		if solah_dir != null:
+			solah_dir.remove("solah_seedi_save.json")
 
 	# --- Autoload ------------------------------------------------------
 	_app = get_root().get_node_or_null("/root/App")
@@ -75,7 +82,7 @@ func _run() -> void:
 
 	# --- Every screen instantiates with correct root -------------------
 	for screen_id in [&"game_selection", &"profile", &"settings", &"auth",
-			&"aadu_puli", &"main_menu"]:
+			&"aadu_puli", &"solah_seedi", &"main_menu"]:
 		_app.navigation.go(screen_id)
 		await _frame()
 		await _frame()
@@ -230,6 +237,9 @@ func _run() -> void:
 
 	# --- Phase 8: ad architecture (client contract) -----------------
 	_test_phase8_ads()
+
+	# --- Phase 9: Solah Seedi (offline + AI + online contract) ------
+	await _test_solah_seedi(screen_container)
 
 	_finish()
 
@@ -564,6 +574,220 @@ func _test_aadu_puli_ai(screen: Control, board: Control, status: Label,
 	_check(not badge.visible, "suite ends in hot seat mode")
 
 
+## Phase 9 contract: the Solah Seedi screen boots from its own save,
+## routes chain input through the shared rules engine (select, extend,
+## offer a stop, finish, step back, clear), hands green to the AI in
+## vs-AI mode, and reuses the ONE online session service under the
+## solah-seedi game key — all offline, no socket, no session.
+func _test_solah_seedi(screen_container: Control) -> void:
+	# Crafted position: red 0+6, greens 11/21/30, red to move, ply 3.
+	# From 6 red can step (7, 12) or jump the chain 6-16-26 over 11+21.
+	_write_solah_save({
+		"version": 1,
+		"board": "R.....R....G.........G........G......",
+		"side_to_move": "red",
+		"ply": 3,
+		"plies_since_capture": 0,
+		"result": "none",
+	})
+	_app.navigation.go(&"solah_seedi")
+	await _frame()
+	await _frame()
+	var screen: Control = null
+	for child in screen_container.get_children():
+		if child.name == "SolahSeediScreen":
+			screen = child
+	_check(screen != null, "solah_seedi screen instantiates")
+	if screen == null:
+		return
+	var status: Label = screen.get_node_or_null("Margin/Content/StatusLabel")
+	var detail: Label = screen.get_node_or_null("Margin/Content/DetailLabel")
+	var undo_btn: Button = screen.get_node_or_null(
+			"Margin/Content/Controls/UndoButton")
+	var play_btn: Button = screen.get_node_or_null(
+			"Margin/Content/Controls/PlayMoveButton")
+	var board: Control = screen.get_node_or_null("Margin/Content/Board")
+	_check(status != null and status.text == "Red to move — step or jump",
+			"the screen restores the stored position (red to move)")
+	_check(detail != null and detail.text.contains("Green 3"),
+			"detail shows the crafted army sizes")
+	_check(undo_btn != null and undo_btn.disabled, "undo starts disabled")
+	_check(play_btn != null and not play_btn.visible,
+			"the play button waits for a stoppable route")
+	_check(board != null and board.has_signal("point_activated"),
+			"board exposes point activation")
+	if board == null or status == null or undo_btn == null or play_btn == null:
+		return
+
+	# Hot seat first: a persisted vs-AI preference must not race us.
+	var hot_seat_btn: Button = screen.get_node_or_null(
+			"Margin/Content/ModeRow/HotSeatButton")
+	_check(hot_seat_btn != null, "hot seat toggle exists")
+	if hot_seat_btn != null:
+		hot_seat_btn.pressed.emit()
+		await _frame()
+		_check(status.text == "Red to move — step or jump",
+				"hot seat mode selects without touching the game")
+
+	# Chain input through the view signal (no rendering needed).
+	board.emit_signal("point_activated", 6)
+	await _frame()
+	_check(board.selection == 6, "tapping a soldier selects it")
+	board.emit_signal("point_activated", 16)
+	await _frame()
+	_check(board.selection == 6 and board.path_points == [6, 16],
+			"a chainable jump keeps the route pending")
+	_check(play_btn.visible, "the play button offers the stop here")
+	_check(play_btn.text == "Play 6-16*",
+			"play button shows the jump notation (got: %s)" % play_btn.text)
+	_check(status.text == "Red to move — step or jump",
+			"the pending route has not been submitted yet")
+	board.emit_signal("point_activated", 26)
+	await _frame()
+	_check(status.text == "Green to move — step or jump",
+			"finishing the chain submits it (got: %s)" % status.text)
+	_check(board.selection == -1 and board.path_points.is_empty(),
+			"the route clears after the move")
+	_check(not undo_btn.disabled, "undo enables after a move")
+	_check(FileAccess.file_exists("user://solah_seedi_save.json"),
+			"position is saved after a move")
+	_check(_solah_save_ply() == 4, "the chain advanced the saved ply")
+
+	# Step back inside the route, then clear it on a foreign tap.
+	undo_btn.pressed.emit()
+	await _frame()
+	_check(status.text == "Red to move — step or jump" and undo_btn.disabled,
+			"undo restores the stored position")
+	board.emit_signal("point_activated", 6)
+	await _frame()
+	board.emit_signal("point_activated", 16)
+	await _frame()
+	_check(play_btn.visible, "the jump waits again")
+	board.emit_signal("point_activated", 6)
+	await _frame()
+	_check(board.selection == 6 and board.path_points == [6],
+			"tapping an earlier hop steps back inside the route")
+	_check(not play_btn.visible, "an unfinished origin has nothing to play")
+	board.emit_signal("point_activated", 30)  # a green soldier
+	await _frame()
+	_check(board.selection == -1 and board.path_points.is_empty(),
+			"tapping a foreign soldier clears the route")
+
+	# vs-AI: red steps 6-7, Easy answers for green, undo rewinds both.
+	var vs_ai_btn: Button = screen.get_node_or_null(
+			"Margin/Content/ModeRow/VsAiButton")
+	var easy_btn: Button = screen.get_node_or_null(
+			"Margin/Content/DifficultyRow/EasyButton")
+	var badge_label: Label = screen.get_node_or_null(
+			"Margin/Content/ModeRow/AiBadge/AiBadgeRow/AiBadgeLabel")
+	if vs_ai_btn != null and easy_btn != null:
+		vs_ai_btn.pressed.emit()
+		await _frame()
+		easy_btn.pressed.emit()
+		await _frame()
+		if badge_label != null:
+			_check(badge_label.text == "AI: Easy",
+					"the badge follows the difficulty")
+		board.emit_signal("point_activated", 6)
+		await _frame()
+		board.emit_signal("point_activated", 7)
+		await _frame()
+		var frames := 0
+		while _solah_save_ply() != 5 and frames < 300:
+			await _frame()
+			frames += 1
+		_check(_solah_save_ply() == 5, "the AI answers the move (ply 5)")
+		_check(status.text == "Red to move — step or jump",
+				"the turn returns to the human (got: %s)" % status.text)
+		undo_btn.pressed.emit()
+		await _frame()
+		_check(_solah_save_ply() == 3,
+				"undo rewinds the whole exchange to the stored position")
+		_check(undo_btn.disabled, "nothing left to undo")
+
+	await _test_solah_online_ui(screen, status, undo_btn)
+
+
+## Phase 9 offline online-UI contract: same node paths as the Aadu
+## Puli screen (one shared session service), solah-seedi game key,
+## sign-in hint while signed out, and the offline save untouched.
+func _test_solah_online_ui(screen: Control, status: Label,
+		undo_btn: Button) -> void:
+	var online_btn: Button = screen.get_node_or_null(
+			"Margin/Content/ModeRow/OnlineButton")
+	var online_row: Control = screen.get_node_or_null("Margin/Content/OnlineRow")
+	var new_btn: Button = screen.get_node_or_null(
+			"Margin/Content/OnlineRow/OnlineActions/NewMatchButton")
+	var join_btn: Button = screen.get_node_or_null(
+			"Margin/Content/OnlineRow/OnlineActions/JoinButton")
+	var code_field: LineEdit = screen.get_node_or_null(
+			"Margin/Content/OnlineRow/OnlineActions/MatchIdField")
+	var online_label: Label = screen.get_node_or_null(
+			"Margin/Content/OnlineRow/OnlineStatusLabel")
+	var resign_btn: Button = screen.get_node_or_null(
+			"Margin/Content/Controls/ResignButton")
+	var rematch_btn: Button = screen.get_node_or_null(
+			"Margin/Content/Controls/RematchButton")
+	var restart_btn: Button = screen.get_node_or_null(
+			"Margin/Content/Controls/RestartButton")
+	var hot_seat_btn: Button = screen.get_node_or_null(
+			"Margin/Content/ModeRow/HotSeatButton")
+	var difficulty_row: Control = screen.get_node_or_null(
+			"Margin/Content/DifficultyRow")
+	var badge: Control = screen.get_node_or_null("Margin/Content/ModeRow/AiBadge")
+	_check(_app.online != null, "online match service is wired into App")
+	_check(online_btn != null and online_row != null and new_btn != null
+			and join_btn != null and code_field != null and online_label != null
+			and resign_btn != null and rematch_btn != null and restart_btn != null
+			and hot_seat_btn != null and difficulty_row != null and badge != null,
+			"online controls exist for solah seedi")
+	if online_btn == null or online_row == null or resign_btn == null \
+			or rematch_btn == null or restart_btn == null:
+		return
+	_check(not online_row.visible, "online panel hidden in hot seat mode")
+	_check(not resign_btn.visible and not rematch_btn.visible,
+			"resign/rematch hidden outside online mode")
+	_check(not _app.online.is_connected_to_server(),
+			"no socket before the player enters online mode")
+
+	var save_before := _solah_save_ply()
+	online_btn.pressed.emit()
+	await _frame()
+	await _frame()
+	_check(online_row.visible, "online panel appears in online mode")
+	_check(not undo_btn.visible and not restart_btn.visible,
+			"offline controls hide in online mode")
+	_check(not difficulty_row.visible and not badge.visible,
+			"AI controls hide in online mode")
+	_check(not resign_btn.visible and not rematch_btn.visible,
+			"resign/rematch wait for a live match")
+	_check(online_btn.button_pressed, "online toggle shows as pressed")
+	_check(not _app.auth.is_authenticated(),
+			"entering online mode creates no session offline")
+	_check(online_label.text == "Sign in to play online matches",
+			"online label asks for sign-in (got: %s)" % online_label.text)
+	_check(status.text == "Sign in to play online",
+			"status asks for sign-in (got: %s)" % status.text)
+	_check(_app.online.game_key == OnlineMatchService.SOLAH_SEEDI_KEY,
+			"the shared session service points at the solah-seedi key")
+	_check(_solah_save_ply() == save_before,
+			"entering online mode leaves the offline save untouched")
+	_check(not _app.online.is_connected_to_server(),
+			"no socket opens without a signed-in player")
+
+	hot_seat_btn.pressed.emit()
+	await _frame()
+	await _frame()
+	_check(not online_row.visible, "online panel hides when leaving online mode")
+	_check(undo_btn.visible and restart_btn.visible, "offline controls return")
+	_check(not online_btn.button_pressed, "online toggle releases")
+	_check(status.text == "Red to move — step or jump",
+			"offline position restored after online mode (got: %s)"
+			% status.text)
+	_check(_solah_save_ply() == save_before,
+			"the offline save is still untouched")
+
+
 # ----------------------------------------------------------------------
 
 func _check(condition: bool, label: String) -> void:
@@ -610,6 +834,32 @@ func _aadu_save_ply() -> int:
 	if not (data is Dictionary) or not (data as Dictionary).has("ply"):
 		return -1
 	return int((data as Dictionary)["ply"])
+
+
+## The ply from the Solah Seedi screen's save file (or -1).
+func _solah_save_ply() -> int:
+	if not FileAccess.file_exists("user://solah_seedi_save.json"):
+		return -1
+	var file := FileAccess.open("user://solah_seedi_save.json", FileAccess.READ)
+	if file == null:
+		return -1
+	var data: Variant = JSON.parse_string(file.get_as_text())
+	file.close()
+	if not (data is Dictionary) or not (data as Dictionary).has("ply"):
+		return -1
+	return int((data as Dictionary)["ply"])
+
+
+## Writes a Solah Seedi position before the screen loads it.
+func _write_solah_save(payload: Dictionary) -> void:
+	var file := FileAccess.open("user://solah_seedi_save.json",
+			FileAccess.WRITE)
+	if file == null:
+		_failures += 1
+		printerr("FAIL: cannot write user://solah_seedi_save.json")
+		return
+	file.store_string(JSON.stringify(payload))
+	file.close()
 
 
 func _finish() -> void:

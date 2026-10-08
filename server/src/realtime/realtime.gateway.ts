@@ -12,7 +12,8 @@ import { JwtService } from '@nestjs/jwt';
 import { ConfigService } from '@nestjs/config';
 import { Server, Socket } from 'socket.io';
 import { MatchEventsService, MatchEvent } from '../events/match-events.service';
-import { MatchesService, SubmitMoveDto, sideForSeat } from '../matches/matches.service';
+import { MatchesService, SubmitMoveDto } from '../matches/matches.service';
+import { sideKeyForSeat } from '../matches/engine-adapters';
 import { MatchClockService } from '../matches/match-clock.service';
 import { AccessTokenPayload } from '../auth/auth.service';
 import { AppConfig } from '../config/configuration';
@@ -151,7 +152,7 @@ export class RealtimeGateway implements OnGatewayConnection, OnGatewayDisconnect
       status: match.status,
       stateVersion: match.stateVersion,
       seat: player.seat,
-      side: sideForSeat(player.seat) === 0 ? 'goats' : 'tigers',
+      side: sideKeyForSeat(match.gameKey, player.seat),
       serverState: match.serverState,
       players: match.players.map((p) => ({
         userId: p.userId,

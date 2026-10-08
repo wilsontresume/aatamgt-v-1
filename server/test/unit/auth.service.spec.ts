@@ -84,7 +84,7 @@ function makeAuth(
 
 describe('AuthService', () => {
   it('registers a user with a hashed password (never plaintext)', async () => {
-    const { service, prisma, wallet } = makeAuth();
+    const { service, prisma } = makeAuth();
     const { user, tokens } = await service.register({
       username: 'Player1',
       password: 'super-secret-1',

@@ -31,7 +31,7 @@ show_coins = true
 
 [node name="SubtitleLabel" type="Label" parent="Margin/Content"]
 theme_type_variation = "Caption"
-text = "Pick a game to play. Aadu Puli Aattam is playable offline."
+text = "Pick a game to play. Aadu Puli Aattam and Solah Seedi are playable."
 
 [node name="AaduPuliCard" parent="Margin/Content" instance=ExtResource("3_card")]
 title_text = "Aadu Puli Aattam"
@@ -40,8 +40,8 @@ badge_text = "Offline"
 
 [node name="SolahSeediCard" parent="Margin/Content" instance=ExtResource("3_card")]
 title_text = "Solah Seedi"
-subtitle_text = "16 Soldiers · classic war game"
-badge_text = "Coming soon"
+subtitle_text = "16 Soldiers · classic war game · hot seat"
+badge_text = "Playable"
 
 [node name="MorrisCard" parent="Margin/Content" instance=ExtResource("3_card")]
 title_text = "Nine Men's Morris"

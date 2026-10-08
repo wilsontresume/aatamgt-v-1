@@ -8,7 +8,6 @@ import {
   AaduPuliRules,
   GameResult,
   GameState,
-  Move,
   MoveKind,
 } from '../../src/aadu-puli';
 

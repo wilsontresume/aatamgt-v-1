@@ -14,20 +14,15 @@ import { MatchEventsService } from '../events/match-events.service';
 import { MatchClockService } from './match-clock.service';
 import { AppConfig } from '../config/configuration';
 import {
-  AaduPuliRules,
-  GameResult,
-  GameState,
-  Move,
-  Side,
-  errorText,
-  stateHash,
-  validate,
-} from '../aadu-puli';
+  CompletionReason,
+  EngineAdapter,
+  MatchCompletion,
+  getAdapter,
+  isEngineGame,
+} from './engine-adapters';
 
-/** The only game with a server-side rules engine (Phase 6). */
-export const AADU_PULI_GAME_KEY = 'aadu-puli-aattam';
-
-export type CompletionReason = 'RULES' | 'RESIGN' | 'TIMEOUT' | 'DISCONNECT';
+export { AADU_PULI_GAME_KEY, SOLAH_SEEDI_GAME_KEY } from './engine-adapters';
+export type { CompletionReason } from './engine-adapters';
 
 export interface CreateMatchDto {
   gameKey: string;
@@ -44,19 +39,14 @@ export type MatchWithPlayers = GameMatch & {
   players: (MatchPlayer & { user: { username: string } })[];
 };
 
-/** Server-owned match state for Aadu Puli Aattam (stored as JSON). */
-export interface AaduPuliServerState {
-  game: typeof AADU_PULI_GAME_KEY;
+/** Server-owned match state for a rules-engine game (stored as JSON). */
+export interface EngineServerState {
+  game: string;
   state: unknown;
   turnDeadlineAt: string;
   turnNumber: number;
   completed?: { reason: CompletionReason; winnerSeat: number | null };
   rematchMatchId?: string;
-}
-
-interface MatchCompletion {
-  winnerSeat: number | null;
-  reason: CompletionReason;
 }
 
 const ELO_K = 16;
@@ -128,14 +118,15 @@ export class MatchesService {
       startedAt: new Date(),
       stateVersion: { increment: 1 },
     };
-    if (previous.gameKey === AADU_PULI_GAME_KEY) {
+    const engine = getAdapter(previous.gameKey);
+    if (engine) {
       deadline = new Date(Date.now() + this.cfg.match.turnTimeoutMs);
       data.serverState = {
-        game: AADU_PULI_GAME_KEY,
-        state: GameState.initial().serialize(),
+        game: engine.gameKey,
+        state: engine.initialState() as Prisma.InputJsonValue,
         turnDeadlineAt: deadline.toISOString(),
         turnNumber: 0,
-      } satisfies AaduPuliServerState;
+      } satisfies EngineServerState;
     }
 
     const match = await this.prisma.gameMatch.update({
@@ -199,8 +190,8 @@ export class MatchesService {
 
   /**
    * Single move intake shared by REST and the WebSocket gateway.
-   * Aadu Puli moves are validated against the authoritative engine
-   * inside a row lock; other games keep the generic envelope rules.
+   * Rules-engine games are validated by their adapter inside a row
+   * lock; other games keep the generic envelope rules.
    * The client never determines legality, turn order or a result.
    */
   async submitMove(userId: string, matchId: string, dto: SubmitMoveDto) {
@@ -211,8 +202,9 @@ export class MatchesService {
       throw new BadRequestException('clientSeq must be a positive integer');
     }
     const preview = await this.requireMatch(matchId, { players: true });
-    if (preview.gameKey === AADU_PULI_GAME_KEY) {
-      return this.submitAaduPuliMove(userId, matchId, dto);
+    const engine = getAdapter(preview.gameKey);
+    if (engine) {
+      return this.submitEngineMove(userId, matchId, dto, engine);
     }
     return this.submitGenericMove(userId, preview, dto);
   }
@@ -279,11 +271,16 @@ export class MatchesService {
   }
 
   /**
-   * Aadu Puli intake: everything happens under a row lock so two
+   * Rules-engine intake: everything happens under a row lock so two
    * simultaneous submits cannot both observe the same position —
    * exactly one is accepted, the other fails on turn/sequence checks.
    */
-  private async submitAaduPuliMove(userId: string, matchId: string, dto: SubmitMoveDto) {
+  private async submitEngineMove(
+    userId: string,
+    matchId: string,
+    dto: SubmitMoveDto,
+    engine: EngineAdapter,
+  ) {
     const outcome = await this.prisma.$transaction(async (tx) => {
       await tx.$queryRaw`SELECT id FROM GameMatch WHERE id = ${matchId} FOR UPDATE`;
       const match = await tx.gameMatch.findUnique({
@@ -297,13 +294,13 @@ export class MatchesService {
       if (!player) throw new ForbiddenException('Only match participants can move');
       if (player.result === 'ABANDONED') throw new ForbiddenException('You left this match');
 
-      const serverState = match.serverState as AaduPuliServerState | null;
-      if (!serverState || serverState.game !== AADU_PULI_GAME_KEY || !serverState.state) {
+      const serverState = match.serverState as EngineServerState | null;
+      if (!serverState || serverState.game !== engine.gameKey || !serverState.state) {
         throw new ConflictException('Match state is not initialised');
       }
-      const state = GameState.deserialize(serverState.state);
-      if (!state) throw new ConflictException('Match state is corrupt');
-      if (state.result !== GameResult.NONE) throw new ConflictException('Match is already finished');
+      const view = engine.load(serverState.state);
+      if (!view) throw new ConflictException('Match state is corrupt');
+      if (view.finished) throw new ConflictException('Match is already finished');
 
       const moveCount = await tx.matchMove.count({ where: { matchId } });
       const seq = moveCount + 1;
@@ -311,23 +308,22 @@ export class MatchesService {
         throw new ConflictException(`Out of order move: expected seq ${seq}`);
       }
 
-      const mySide = sideForSeat(player.seat);
-      if (state.sideToMove !== mySide) throw new ForbiddenException('Not your turn');
+      if (view.seatToMove !== player.seat) throw new ForbiddenException('Not your turn');
 
-      const move = Move.fromWire(dto.payload);
+      const move = engine.parseMove(dto.payload);
       if (!move) throw new BadRequestException('Malformed move payload');
-      const verdict = validate(state, move);
-      if (!verdict.ok) throw new BadRequestException(errorText(verdict.issue));
-      const next = AaduPuliRules.apply(state, move);
-      if (!next) throw new BadRequestException('Illegal move');
+      const issue = engine.check(view, move);
+      if (issue) throw new BadRequestException(issue);
+      const nextView = engine.apply(view, move);
+      if (!nextView) throw new BadRequestException('Illegal move');
 
-      const completion = completionFor(next);
+      const completion = engine.completion(nextView);
       const deadline = new Date(Date.now() + this.cfg.match.turnTimeoutMs);
-      const nextState: AaduPuliServerState = {
-        game: AADU_PULI_GAME_KEY,
-        state: next.serialize(),
+      const nextState: EngineServerState = {
+        game: engine.gameKey,
+        state: nextView.raw,
         turnDeadlineAt: deadline.toISOString(),
-        turnNumber: next.ply,
+        turnNumber: nextView.ply,
         ...(serverState.rematchMatchId ? { rematchMatchId: serverState.rematchMatchId } : {}),
         ...(completion
           ? { completed: { reason: completion.reason, winnerSeat: completion.winnerSeat } }
@@ -341,7 +337,7 @@ export class MatchesService {
           matchPlayerId: player.id,
           userId,
           payload: dto.payload as Prisma.InputJsonValue,
-          stateHash: stateHash(next.serialize()),
+          stateHash: nextView.hash,
         },
       });
 
@@ -362,11 +358,11 @@ export class MatchesService {
       return {
         seq,
         stateVersion: updated.stateVersion,
-        notation: move.notation(),
-        state: next.serialize(),
-        sideToMove: (next.sideToMove === Side.GOATS ? 'goats' : 'tigers') as 'goats' | 'tigers',
+        notation: engine.notation(move),
+        state: nextView.raw,
+        sideToMove: nextView.sideKey,
         turnDeadlineAt: nextState.turnDeadlineAt,
-        ply: next.ply,
+        ply: nextView.ply,
         serverAt: moveRow.serverAt.toISOString(),
         completion,
         results,
@@ -462,15 +458,17 @@ export class MatchesService {
         await tx.$queryRaw`SELECT id FROM GameMatch WHERE id = ${matchId} FOR UPDATE`;
         const match = await tx.gameMatch.findUnique({ where: { id: matchId }, include: { players: true } });
         if (!match || match.status !== 'ACTIVE') return null;
-        const serverState = match.serverState as AaduPuliServerState | null;
+        const engine = getAdapter(match.gameKey);
+        if (!engine) return null;
+        const serverState = match.serverState as EngineServerState | null;
         if (!serverState?.turnDeadlineAt) return null;
         const deadline = Date.parse(serverState.turnDeadlineAt);
         if (Number.isFinite(deadline) && Date.now() + 25 < deadline) {
           return { rearm: new Date(deadline), completion: null, results: null, stateVersion: 0 };
         }
-        const state = GameState.deserialize(serverState.state);
-        if (!state || state.result !== GameResult.NONE) return null;
-        const loserSeat = seatForSide(state.sideToMove);
+        const view = engine.load(serverState.state);
+        if (!view || view.finished) return null;
+        const loserSeat = view.seatToMove;
         const completion: MatchCompletion = { winnerSeat: loserSeat === 0 ? 1 : 0, reason: 'TIMEOUT' };
         const results = await this.applyCompletion(tx, match.players, completion);
         const updated = await tx.gameMatch.update({
@@ -532,7 +530,8 @@ export class MatchesService {
 
   /**
    * Rematch: creates a fresh match with the same players and swapped
-   * seats (the previous loser gets the goats, which move first).
+   * seats (the previous loser takes seat 0, which moves first in every
+   * engine game — goats in Aadu Puli, red in Solah Seedi).
    * Idempotent per completed match — a second request returns the
    * existing rematch.
    */
@@ -547,7 +546,7 @@ export class MatchesService {
       throw new ForbiddenException('You are not in this match');
     }
 
-    const previous = match.serverState as AaduPuliServerState | null;
+    const previous = match.serverState as EngineServerState | null;
     if (previous?.rematchMatchId) {
       const existing = await this.prisma.gameMatch.findUnique({
         where: { id: previous.rematchMatchId },
@@ -560,7 +559,7 @@ export class MatchesService {
     const created = await this.prisma.$transaction(async (tx) => {
       await tx.$queryRaw`SELECT id FROM GameMatch WHERE id = ${matchId} FOR UPDATE`;
       const locked = await tx.gameMatch.findUnique({ where: { id: matchId } });
-      const lockedState = locked?.serverState as AaduPuliServerState | null;
+      const lockedState = locked?.serverState as EngineServerState | null;
       if (lockedState?.rematchMatchId) return { existingId: lockedState.rematchMatchId as string };
       const newMatch = await tx.gameMatch.create({
         data: {
@@ -621,8 +620,8 @@ export class MatchesService {
   /** Re-arms a missing turn clock (called on every (re)subscribe). */
   async ensureTurnClock(matchId: string): Promise<void> {
     const match = await this.prisma.gameMatch.findUnique({ where: { id: matchId } });
-    if (!match || match.status !== 'ACTIVE' || match.gameKey !== AADU_PULI_GAME_KEY) return;
-    const serverState = match.serverState as AaduPuliServerState | null;
+    if (!match || match.status !== 'ACTIVE' || !isEngineGame(match.gameKey)) return;
+    const serverState = match.serverState as EngineServerState | null;
     if (!serverState?.turnDeadlineAt) return;
     this.armTurn(matchId, new Date(serverState.turnDeadlineAt));
   }
@@ -719,7 +718,7 @@ export class MatchesService {
     previous: unknown,
     completion: MatchCompletion,
   ): Prisma.InputJsonValue {
-    const base = (previous ?? {}) as AaduPuliServerState;
+    const base = (previous ?? {}) as EngineServerState;
     return {
       ...base,
       completed: { reason: completion.reason, winnerSeat: completion.winnerSeat },
@@ -776,23 +775,4 @@ export class MatchesService {
     if (!match) throw new NotFoundException('Match not found');
     return match;
   }
-}
-
-/** Seat 0 plays the goats (which move first); seat 1 plays the tigers. */
-export function sideForSeat(seat: number): Side {
-  return seat === 0 ? Side.GOATS : Side.TIGERS;
-}
-
-export function seatForSide(side: Side): number {
-  return side === Side.GOATS ? 0 : 1;
-}
-
-/** Server-decided result for a finished engine state. */
-export function completionFor(state: GameState): MatchCompletion | null {
-  if (state.result === GameResult.NONE) return null;
-  if (state.result === GameResult.DRAW) return { winnerSeat: null, reason: 'RULES' };
-  return {
-    winnerSeat: state.result === GameResult.GOATS_WIN ? 0 : 1,
-    reason: 'RULES',
-  };
 }

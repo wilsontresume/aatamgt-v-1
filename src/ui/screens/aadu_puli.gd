@@ -268,6 +268,8 @@ func _set_online_mode() -> void:
 	_ai_mode = false
 	_selected = -1
 	_announced_match_id = ""
+	# One shared OnlineMatchService, pointed at this game's key.
+	App.online.set_game_key(OnlineMatchService.AADU_PULI_KEY)
 	_online_bootstrap()
 	_refresh()
 

@@ -17,7 +17,7 @@ import {
   POINT_COUNT,
   Side,
 } from './aadu-puli.state';
-import { Issue, validate, Verdict } from './aadu-puli.validator';
+import { validate, Verdict } from './aadu-puli.validator';
 
 /** Ordered polylines of the chart (spec §2). */
 export const LINES: readonly (readonly number[])[] = [

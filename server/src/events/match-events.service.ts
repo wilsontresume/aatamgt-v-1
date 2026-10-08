@@ -1,5 +1,6 @@
 import { Injectable } from '@nestjs/common';
 import { Subject, Observable } from 'rxjs';
+import type { EngineSideKey } from '../matches/engine-adapters';
 
 export interface MatchMoveEvent {
   matchId: string;
@@ -8,11 +9,11 @@ export interface MatchMoveEvent {
   userId: string;
   payload: unknown;
   at: string;
-  /** Aadu Puli: canonical notation of the accepted move. */
+  /** Engine game: canonical notation of the accepted move. */
   notation?: string;
-  /** Aadu Puli: full serialized state after the move (server truth). */
+  /** Engine game: full serialized state after the move (server truth). */
   state?: unknown;
-  sideToMove?: 'goats' | 'tigers';
+  sideToMove?: EngineSideKey;
   turnDeadlineAt?: string;
 }
 
