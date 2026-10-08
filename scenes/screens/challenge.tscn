@@ -1,0 +1,141 @@
+[gd_scene load_steps=4 format=3]
+
+[ext_resource type="Script" path="res://src/ui/screens/challenge.gd" id="1_ch"]
+[ext_resource type="PackedScene" path="res://scenes/components/top_bar.tscn" id="2_tb"]
+[ext_resource type="PackedScene" path="res://scenes/components/button.tscn" id="3_btn"]
+
+[node name="Challenge" type="Control"]
+anchor_right = 1.0
+anchor_bottom = 1.0
+grow_horizontal = 2
+grow_vertical = 2
+script = ExtResource("1_ch")
+
+[node name="Margin" type="MarginContainer" parent="."]
+anchor_right = 1.0
+anchor_bottom = 1.0
+grow_horizontal = 2
+grow_vertical = 2
+theme_override_constants/margin_left = 24
+theme_override_constants/margin_top = 20
+theme_override_constants/margin_right = 24
+theme_override_constants/margin_bottom = 24
+
+[node name="Content" type="VBoxContainer" parent="Margin"]
+theme_override_constants/separation = 12
+
+[node name="TopBar" parent="Margin/Content" instance=ExtResource("2_tb")]
+title = "Challenge"
+show_back = true
+show_coins = false
+
+[node name="ChoosePanel" type="PanelContainer" parent="Margin/Content"]
+theme_type_variation = "Card"
+visible = false
+
+[node name="ChooseBody" type="VBoxContainer" parent="Margin/Content/ChoosePanel"]
+theme_override_constants/separation = 10
+
+[node name="ChooseTitle" type="Label" parent="Margin/Content/ChoosePanel/ChooseBody"]
+theme_type_variation = "Heading"
+text = "Challenge a friend to"
+
+[node name="ChooseList" type="VBoxContainer" parent="Margin/Content/ChoosePanel/ChooseBody"]
+theme_override_constants/separation = 8
+
+[node name="ChooseHint" type="Label" parent="Margin/Content/ChoosePanel/ChooseBody"]
+theme_type_variation = "Caption"
+autowrap_mode = 3
+text = ""
+
+[node name="IncomingPanel" type="PanelContainer" parent="Margin/Content"]
+theme_type_variation = "Card"
+visible = false
+
+[node name="IncomingBody" type="VBoxContainer" parent="Margin/Content/IncomingPanel"]
+theme_override_constants/separation = 10
+
+[node name="IncomingLabel" type="Label" parent="Margin/Content/IncomingPanel/IncomingBody"]
+theme_type_variation = "Heading"
+autowrap_mode = 3
+text = ""
+
+[node name="ExpiresLabel" type="Label" parent="Margin/Content/IncomingPanel/IncomingBody"]
+theme_type_variation = "Caption"
+text = ""
+
+[node name="IncomingActions" type="HBoxContainer" parent="Margin/Content/IncomingPanel/IncomingBody"]
+theme_override_constants/separation = 8
+
+[node name="AcceptButton" parent="Margin/Content/IncomingPanel/IncomingBody/IncomingActions" instance=ExtResource("3_btn")]
+custom_minimum_size = Vector2(0, 44)
+variant = 0
+text = "Accept"
+
+[node name="DeclineButton" parent="Margin/Content/IncomingPanel/IncomingBody/IncomingActions" instance=ExtResource("3_btn")]
+custom_minimum_size = Vector2(0, 44)
+variant = 1
+text = "Decline"
+
+[node name="CodePanel" type="PanelContainer" parent="Margin/Content"]
+theme_type_variation = "Card"
+visible = false
+
+[node name="CodeBody" type="VBoxContainer" parent="Margin/Content/CodePanel"]
+theme_override_constants/separation = 8
+
+[node name="CodeCaption" type="Label" parent="Margin/Content/CodePanel/CodeBody"]
+theme_type_variation = "Caption"
+text = "Share code"
+
+[node name="CodeLabel" type="Label" parent="Margin/Content/CodePanel/CodeBody"]
+theme_type_variation = "Heading"
+horizontal_alignment = 1
+text = ""
+
+[node name="StatusLabel" type="Label" parent="Margin/Content/CodePanel/CodeBody"]
+theme_type_variation = "Caption"
+autowrap_mode = 3
+horizontal_alignment = 1
+text = ""
+
+[node name="SharePanel" type="PanelContainer" parent="Margin/Content"]
+theme_type_variation = "Card"
+visible = false
+
+[node name="ShareBody" type="VBoxContainer" parent="Margin/Content/SharePanel"]
+theme_override_constants/separation = 8
+
+[node name="ShareHeading" type="Label" parent="Margin/Content/SharePanel/ShareBody"]
+theme_type_variation = "Heading"
+text = "Message"
+
+[node name="ShareText" type="Label" parent="Margin/Content/SharePanel/ShareBody"]
+theme_type_variation = "Body"
+autowrap_mode = 3
+text = ""
+
+[node name="ShareRow" type="HBoxContainer" parent="Margin/Content/SharePanel/ShareBody"]
+theme_override_constants/separation = 8
+
+[node name="WhatsappButton" parent="Margin/Content/SharePanel/ShareBody/ShareRow" instance=ExtResource("3_btn")]
+custom_minimum_size = Vector2(0, 44)
+variant = 0
+text = "Share on WhatsApp"
+
+[node name="CopyButton" parent="Margin/Content/SharePanel/ShareBody/ShareRow" instance=ExtResource("3_btn")]
+custom_minimum_size = Vector2(0, 44)
+variant = 1
+text = "Copy"
+
+[node name="ExtraRow" type="HBoxContainer" parent="Margin/Content"]
+theme_override_constants/separation = 8
+visible = false
+
+[node name="CancelButton" parent="Margin/Content/ExtraRow" instance=ExtResource("3_btn")]
+custom_minimum_size = Vector2(0, 44)
+variant = 1
+text = "Cancel challenge"
+
+[node name="Spacer" type="Control" parent="Margin/Content"]
+size_flags_vertical = 3

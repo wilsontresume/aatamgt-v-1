@@ -16,6 +16,10 @@ const SCREEN_PATHS := {
 	&"auth": "res://scenes/screens/auth_screen.tscn",
 	&"aadu_puli": "res://scenes/screens/aadu_puli.tscn",
 	&"solah_seedi": "res://scenes/screens/solah_seedi.tscn",
+	&"nine_mens_morris": "res://scenes/screens/nine_mens_morris.tscn",
+	&"friends": "res://scenes/screens/friends.tscn",
+	&"challenge": "res://scenes/screens/challenge.tscn",
+	&"history": "res://scenes/screens/history.tscn",
 }
 
 ## Reaching this screen resets the back stack (it is the hub).

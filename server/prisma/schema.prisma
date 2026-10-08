@@ -52,6 +52,8 @@ model User {
   adShows         AdShow[]
   friendshipsSent Friendship[]   @relation("friend_requester")
   friendshipsGot  Friendship[]   @relation("friend_addressee")
+  challengesSent  Challenge[]    @relation("challenge_challenger")
+  challengesGot   Challenge[]    @relation("challenge_invitee")
   leaderboardRows LeaderboardEntry[]
   auditLogs       AdminAuditLog[]
 
@@ -328,6 +330,37 @@ model Friendship {
 
   @@unique([requesterId, addresseeId])
   @@index([addresseeId, status])
+}
+
+enum ChallengeStatus {
+  PENDING
+  ACCEPTED
+  DECLINED
+  CANCELLED
+  EXPIRED
+}
+
+/// Shareable game challenge: created by a challenger, optionally aimed at a
+/// specific invitee (open codes keep inviteeId null). The match row is only
+/// created when the invitee accepts — the challenge itself is just a code.
+model Challenge {
+  id          String         @id @default(cuid())
+  code        String         @unique
+  gameKey     String         @db.VarChar(64)
+  challengerId String
+  inviteeId   String?
+  matchId     String?
+  status      ChallengeStatus @default(PENDING)
+  createdAt   DateTime       @default(now())
+  expiresAt   DateTime
+  respondedAt DateTime?
+
+  challenger User @relation("challenge_challenger", fields: [challengerId], references: [id], onDelete: Cascade)
+  invitee    User? @relation("challenge_invitee", fields: [inviteeId], references: [id], onDelete: Cascade)
+
+  @@index([inviteeId, status])
+  @@index([challengerId, status])
+  @@index([status, expiresAt])
 }
 
 model Notification {

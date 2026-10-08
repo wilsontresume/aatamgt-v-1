@@ -21,6 +21,16 @@ import {
   validate as apValidate,
 } from '../aadu-puli';
 import {
+  NineMensMorrisRules,
+  GameResult as NmGameResult,
+  GameState as NmGameState,
+  Move as NmMove,
+  Side as NmSide,
+  errorText as nmErrorText,
+  stateHash as nmStateHash,
+  validate as nmValidate,
+} from '../nine-mens-morris';
+import {
   SolahSeediRules,
   GameResult as SsGameResult,
   GameState as SsGameState,
@@ -33,6 +43,7 @@ import {
 
 /** Game keys with a server-side rules engine. */
 export const AADU_PULI_GAME_KEY = 'aadu-puli-aattam';
+export const NINE_MENS_MORRIS_GAME_KEY = 'nine-mens-morris';
 export const SOLAH_SEEDI_GAME_KEY = 'solah-seedi';
 
 export type CompletionReason = 'RULES' | 'RESIGN' | 'TIMEOUT' | 'DISCONNECT';
@@ -174,11 +185,56 @@ const solahSeediAdapter: EngineAdapter = {
 };
 
 // ---------------------------------------------------------------------------
+// Nine Men's Morris
+// ---------------------------------------------------------------------------
+
+function nmView(state: NmGameState): EngineView {
+  const raw = state.serialize();
+  const red = state.sideToMove === NmSide.RED;
+  return {
+    opaque: state,
+    raw,
+    sideKey: red ? 'red' : 'green',
+    seatToMove: red ? 0 : 1,
+    ply: state.ply,
+    finished: state.result !== NmGameResult.NONE,
+    hash: nmStateHash(raw),
+  };
+}
+
+const nineMensMorrisAdapter: EngineAdapter = {
+  gameKey: NINE_MENS_MORRIS_GAME_KEY,
+  initialState: () => NmGameState.initial().serialize(),
+  load(raw: unknown) {
+    const state = NmGameState.deserialize(raw);
+    return state ? nmView(state) : null;
+  },
+  parseMove: (payload) => NmMove.fromWire(payload),
+  check(view, move) {
+    const verdict = nmValidate(view.opaque as NmGameState, (move ?? null) as NmMove | null);
+    return verdict.ok ? null : nmErrorText(verdict.issue);
+  },
+  apply(view, move) {
+    const next = NineMensMorrisRules.apply(view.opaque as NmGameState, move as NmMove);
+    return next ? nmView(next) : null;
+  },
+  notation: (move) => NineMensMorrisRules.notation(move as NmMove),
+  completion(view) {
+    const result = (view.opaque as NmGameState).result;
+    if (result === NmGameResult.NONE) return null;
+    if (result === NmGameResult.DRAW) return { winnerSeat: null, reason: 'RULES' };
+    return { winnerSeat: result === NmGameResult.RED_WIN ? 0 : 1, reason: 'RULES' };
+  },
+  sideKeyForSeat: (seat) => (seat === 0 ? 'red' : 'green'),
+};
+
+// ---------------------------------------------------------------------------
 // Registry
 // ---------------------------------------------------------------------------
 
 const ADAPTERS: Record<string, EngineAdapter> = {
   [AADU_PULI_GAME_KEY]: aaduPuliAdapter,
+  [NINE_MENS_MORRIS_GAME_KEY]: nineMensMorrisAdapter,
   [SOLAH_SEEDI_GAME_KEY]: solahSeediAdapter,
 };
 

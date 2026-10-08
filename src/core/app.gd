@@ -28,6 +28,9 @@ var online: OnlineMatchService
 ## Phase 8: rewarded + interstitial ads behind a provider abstraction.
 var ads: AdService
 
+## Phase 11: friends, challenges, match history (REST-only social layer).
+var social: SocialService
+
 var _bootstrapped := false
 
 
@@ -42,6 +45,7 @@ func _init() -> void:
 	auth = AuthService.new(api_client)
 	online = OnlineMatchService.new(api_client, auth)
 	ads = AdService.new(auth)
+	social = SocialService.new(auth)
 
 
 func _ready() -> void:

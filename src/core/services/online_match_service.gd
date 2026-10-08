@@ -22,6 +22,7 @@ signal rematch_available(new_match_id: String)
 ## Game keys as published by the server catalog.
 const AADU_PULI_KEY := "aadu-puli-aattam"
 const SOLAH_SEEDI_KEY := "solah-seedi"
+const NINE_MENS_MORRIS_KEY := "nine-mens-morris"
 const DEFAULT_GAME_KEY := AADU_PULI_KEY
 const ACK_TIMEOUT := 6.0
 
@@ -50,6 +51,10 @@ var reconnecting := false
 var _wants_connection := false
 var _opening := false
 var _announced_match := ""      # match ids whose completion was emitted
+## Phase 11: set by the challenge flow; the next game screen consumes
+## this in _ready() and enters online mode by itself (the accepted
+## match is already waiting on the server).
+var auto_enter_online := false
 
 
 func _init(p_api: ApiClient = null, p_auth: AuthService = null) -> void:
@@ -68,6 +73,18 @@ func set_game_key(key: String) -> void:
 	game_key = key
 
 
+## Phase 11: the game screen should boot straight into online mode
+## (challenge accepted / rematch pending). One-shot: consumed on read.
+func request_auto_online() -> void:
+	auto_enter_online = true
+
+
+func consume_auto_online() -> bool:
+	var wanted := auto_enter_online
+	auto_enter_online = false
+	return wanted
+
+
 func _enter_tree() -> void:
 	_ensure_socket()
 
@@ -83,7 +100,14 @@ func is_active() -> bool:
 
 
 func is_my_turn() -> bool:
-	return is_active() and str(state_dict.get("side_to_move", "")) == side
+	if not is_active():
+		return false
+	# Engines own their serialization: solah-seedi and aadu-puli use
+	# "side_to_move", nine-mens-morris uses "to_move" (spec §9).
+	var mover := str(state_dict.get("side_to_move", ""))
+	if mover.is_empty():
+		mover = str(state_dict.get("to_move", ""))
+	return mover == side
 
 
 func my_user_id() -> String:

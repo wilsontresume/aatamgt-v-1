@@ -2,15 +2,27 @@ import {
   BadRequestException,
   ConflictException,
   ForbiddenException,
+  HttpException,
   Injectable,
   NotFoundException,
 } from '@nestjs/common';
+import { ConfigService } from '@nestjs/config';
 import { Friendship, FriendStatus } from '@prisma/client';
 import { PrismaService } from '../prisma/prisma.service';
+import { NotificationsService } from '../notifications/notifications.service';
+import { AppConfig } from '../config/configuration';
 
 @Injectable()
 export class FriendsService {
-  constructor(private readonly prisma: PrismaService) {}
+  private readonly social: AppConfig['social'];
+
+  constructor(
+    private readonly prisma: PrismaService,
+    config: ConfigService,
+    private readonly notifications: NotificationsService,
+  ) {
+    this.social = (config.get<AppConfig>('app') as AppConfig).social;
+  }
 
   async list(userId: string) {
     const rows = await this.prisma.friendship.findMany({
@@ -54,6 +66,22 @@ export class FriendsService {
     if (!target) throw new NotFoundException('User not found');
     if (target.id === fromUserId) throw new BadRequestException('You cannot add yourself');
 
+    // Abuse controls: one account may only hold so many pending requests and
+    // fire off so many per hour before being rate limited.
+    const pendingOutgoing = await this.prisma.friendship.count({
+      where: { requesterId: fromUserId, status: 'PENDING' },
+    });
+    if (pendingOutgoing >= this.social.friendPendingLimit) {
+      throw new HttpException('Too many pending requests. Wait for a reply.', 429);
+    }
+    const oneHourAgo = new Date(Date.now() - 60 * 60 * 1000);
+    const recent = await this.prisma.friendship.count({
+      where: { requesterId: fromUserId, createdAt: { gte: oneHourAgo } },
+    });
+    if (recent >= this.social.friendRequestPerHour) {
+      throw new HttpException('Too many requests today. Try again later.', 429);
+    }
+
     const existing = await this.prisma.friendship.findFirst({
       where: {
         OR: [
@@ -63,10 +91,36 @@ export class FriendsService {
       },
     });
     if (existing?.status === 'BLOCKED') throw new ForbiddenException('Cannot send a request');
-    if (existing) throw new ConflictException('A friendship request already exists');
+    if (existing?.status === 'PENDING') {
+      throw new ConflictException(
+        existing.requesterId === fromUserId
+          ? 'A friendship request already exists'
+          : 'They already sent you a request',
+      );
+    }
+    if (existing?.status === 'ACCEPTED') throw new ConflictException('You are already friends');
 
-    const created = await this.prisma.friendship.create({
-      data: { requesterId: fromUserId, addresseeId: target.id, status: 'PENDING' },
+    // DECLINED rows are reusable: a fresh request resets them back to PENDING
+    // (swapping the pair so `requesterId` is always the new sender).
+    const created = existing
+      ? await this.prisma.friendship.update({
+          where: { id: existing.id },
+          data: { requesterId: fromUserId, addresseeId: target.id, status: 'PENDING' },
+        })
+      : await this.prisma.friendship.create({
+          data: { requesterId: fromUserId, addresseeId: target.id, status: 'PENDING' },
+        });
+
+    const me = await this.prisma.user.findUnique({
+      where: { id: fromUserId },
+      select: { username: true },
+    });
+    await this.notifications.notify({
+      userId: target.id,
+      type: 'friend_request',
+      title: 'Friend request',
+      body: `${me?.username ?? 'Someone'} sent you a friend request`,
+      data: { friendshipId: created.id, userId: fromUserId },
     });
     return { id: created.id, status: created.status, username: target.username };
   }
@@ -79,6 +133,19 @@ export class FriendsService {
       where: { id: row.id },
       data: { status },
     });
+    if (action === 'accept') {
+      const me = await this.prisma.user.findUnique({
+        where: { id: userId },
+        select: { username: true },
+      });
+      await this.notifications.notify({
+        userId: row.requesterId,
+        type: 'friend_accepted',
+        title: 'Friend request accepted',
+        body: `${me?.username ?? 'Someone'} accepted your friend request`,
+        data: { friendshipId: row.id, userId },
+      });
+    }
     return { id: updated.id, status: updated.status };
   }
 

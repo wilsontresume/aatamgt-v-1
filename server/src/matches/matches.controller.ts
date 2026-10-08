@@ -42,8 +42,8 @@ export class MatchesController {
   }
 
   @Get()
-  async mine(@CurrentUser() auth: AuthUser) {
-    const list = await this.matches.listMy(auth.id);
+  async mine(@CurrentUser() auth: AuthUser, @Query('status') status?: string) {
+    const list = await this.matches.listMy(auth.id, status);
     return { items: list.map((m) => this.matches.serialize(m)) };
   }
 

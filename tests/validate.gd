@@ -12,6 +12,10 @@ const SCREEN_ROOT_NAMES := {
 	&"auth": "AuthScreen",
 	&"aadu_puli": "AaduPuliScreen",
 	&"solah_seedi": "SolahSeediScreen",
+	&"nine_mens_morris": "NineMensMorrisScreen",
+	&"friends": "Friends",
+	&"challenge": "Challenge",
+	&"history": "History",
 }
 
 var _checks := 0
@@ -50,6 +54,12 @@ func _run() -> void:
 		if solah_dir != null:
 			solah_dir.remove("solah_seedi_save.json")
 
+	# Phase 10: same for the stored Nine Men's Morris position.
+	if FileAccess.file_exists("user://nine_mens_morris_save.json"):
+		var morris_dir := DirAccess.open("user://")
+		if morris_dir != null:
+			morris_dir.remove("nine_mens_morris_save.json")
+
 	# --- Autoload ------------------------------------------------------
 	_app = get_root().get_node_or_null("/root/App")
 	_check(_app != null, "autoload App is registered")
@@ -82,7 +92,8 @@ func _run() -> void:
 
 	# --- Every screen instantiates with correct root -------------------
 	for screen_id in [&"game_selection", &"profile", &"settings", &"auth",
-			&"aadu_puli", &"solah_seedi", &"main_menu"]:
+			&"aadu_puli", &"solah_seedi", &"nine_mens_morris",
+			&"friends", &"challenge", &"history", &"main_menu"]:
 		_app.navigation.go(screen_id)
 		await _frame()
 		await _frame()
@@ -241,7 +252,42 @@ func _run() -> void:
 	# --- Phase 9: Solah Seedi (offline + AI + online contract) ------
 	await _test_solah_seedi(screen_container)
 
+	# --- Phase 10: Nine Men's Morris (offline + AI + online contract) --
+	await _test_nine_mens_morris(screen_container)
+
+	# --- Phase 11: social (friends / challenges / history) -----------
+	await _test_phase11_social()
+
 	_finish()
+
+
+## Phase 11 social contract: the three social screens are registered,
+## SocialService covers every REST flow, the WhatsApp share text is
+## pinned to the product example, and no chat API/UI ships yet.
+func _test_phase11_social() -> void:
+	for screen_id in [&"friends", &"challenge", &"history"]:
+		_check(_app.navigation.has_screen(screen_id),
+				"navigation knows social screen '%s'" % screen_id)
+	_check(_app.social is SocialService, "App exposes the SocialService")
+	var social_methods := []
+	for m in _app.social.get_method_list():
+		social_methods.append(str(m.get("name", "")))
+	for required in ["list_friends", "send_friend_request", "accept_friend_request",
+			"decline_friend_request", "remove_friend", "block_user",
+			"create_challenge", "get_challenge", "accept_challenge",
+			"decline_challenge", "cancel_challenge", "challenge_inbox",
+			"match_history"]:
+		_check(social_methods.has(required),
+				"SocialService exposes %s" % required)
+	_check(not social_methods.has("send_message"),
+			"no chat message API (Phase 11 ships no text chat)")
+	var msg := SocialService.challenge_message(
+			"Wilson", "Aadu Puli Aattam", "K7M2QX9B")
+	_check(msg.begins_with("AATAMGT challenge:\n"
+			+ "Wilson challenged you to Aadu Puli Aattam.\nJoin the match."),
+			"challenge share text matches the WhatsApp example")
+	_check(msg.contains("\n\nCode: K7M2QX9B"),
+			"challenge share text carries the entry code")
 
 
 ## Phase 7 offline contract: the client can only OBSERVE the coin
@@ -788,6 +834,334 @@ func _test_solah_online_ui(screen: Control, status: Label,
 			"the offline save is still untouched")
 
 
+## Phase 10 contract: the Nine Men's Morris screen boots from its own
+## save, routes placement and movement input through the shared rules
+## engine (select, land, capture, undo), hands green to the AI in
+## vs-AI mode, and reuses the ONE online session service under the
+## nine-mens-morris game key — all offline, no socket, no session.
+func _test_nine_mens_morris(screen_container: Control) -> void:
+	# Crafted movement position: reds 0/2/9/16, greens 12/13/20/21,
+	# red to move, ply 2. Red may step 16-17 (plain) or 9-1, which
+	# completes the mill 0-1-2 and forces a capture.
+	_write_morris_save({
+		"version": 1,
+		"board": "R.R......R..GG..R...GG..",
+		"to_move": "red",
+		"hand_red": 0,
+		"hand_green": 0,
+		"ply": 2,
+		"plies_since_capture": 1,
+		"result": "none",
+		"history": ["R.R......R..GG..R...GG..|red|0|0"],
+	})
+	_app.navigation.go(&"nine_mens_morris")
+	await _frame()
+	await _frame()
+	var screen: Control = null
+	for child in screen_container.get_children():
+		if child.name == "NineMensMorrisScreen":
+			screen = child
+	_check(screen != null, "nine_mens_morris screen instantiates")
+	if screen == null:
+		return
+	var status: Label = screen.get_node_or_null("Margin/Content/StatusLabel")
+	var detail: Label = screen.get_node_or_null("Margin/Content/DetailLabel")
+	var undo_btn: Button = screen.get_node_or_null(
+			"Margin/Content/Controls/UndoButton")
+	var board: Control = screen.get_node_or_null("Margin/Content/Board")
+	_check(status != null
+			and status.text == "Red to move — step to an adjacent point",
+			"the screen restores the stored position (red to move)")
+	_check(detail != null and detail.text.contains("Red 4 · Green 4"),
+			"detail shows the crafted army sizes")
+	_check(detail != null and detail.text.contains("Hand 0 · 0"),
+			"detail shows both hands empty (movement phase)")
+	_check(undo_btn != null and undo_btn.disabled, "undo starts disabled")
+	_check(board != null and board.has_signal("point_activated"),
+			"board exposes point activation")
+	if board == null or status == null or undo_btn == null:
+		return
+
+	# Hot seat first: a persisted vs-AI preference must not race us.
+	var hot_seat_btn: Button = screen.get_node_or_null(
+			"Margin/Content/ModeRow/HotSeatButton")
+	_check(hot_seat_btn != null, "hot seat toggle exists")
+	if hot_seat_btn != null:
+		hot_seat_btn.pressed.emit()
+		await _frame()
+		_check(status.text == "Red to move — step to an adjacent point",
+				"hot seat mode selects without touching the game")
+
+	# Movement input through the view signal (no rendering needed):
+	# select a piece to see its landings, then step it plainly.
+	board.emit_signal("point_activated", 16)
+	await _frame()
+	_check(board.selection == 16, "tapping a soldier selects it")
+	_check(board.target_points == [17, 23],
+			"the selected piece rings its landings (got: %s)"
+			% [board.target_points])
+	board.emit_signal("point_activated", 17)
+	await _frame()
+	_check(status.text == "Green to move — step to an adjacent point",
+			"a plain step submits at once (got: %s)" % status.text)
+	_check(board.selection == -1,
+			"the selection clears after the move")
+	_check(not undo_btn.disabled, "undo enables after a move")
+	_check(FileAccess.file_exists("user://nine_mens_morris_save.json"),
+			"position is saved after a move")
+	_check(_morris_save_ply() == 3, "the step advanced the saved ply")
+
+	# Green answers in hot seat: 20-19, also plain.
+	board.emit_signal("point_activated", 20)
+	await _frame()
+	_check(board.selection == 20, "green selects its own soldier")
+	board.emit_signal("point_activated", 19)
+	await _frame()
+	_check(status.text == "Red to move — step to an adjacent point",
+			"green's step returns the turn (got: %s)" % status.text)
+	_check(_morris_save_ply() == 4, "green's step advances the saved ply")
+
+	# The mill: 9-1 completes 0-1-2, the capture step rings the enemy.
+	board.emit_signal("point_activated", 9)
+	await _frame()
+	board.emit_signal("point_activated", 1)
+	await _frame()
+	_check(status.text == "Red to capture — remove a ringed enemy piece",
+			"a new mill opens the capture step (got: %s)" % status.text)
+	_check(board.capture_points == [12, 13, 19, 21],
+			"every free enemy piece is ringed (got: %s)"
+			% [board.capture_points])
+	_check(board.target_points == [1],
+			"the mill's landing stays ringed while capturing (got: %s)"
+			% [board.target_points])
+	board.emit_signal("point_activated", 13)
+	await _frame()
+	_check(status.text == "Green to move — fly to any open point",
+			"tapping a ringed enemy completes the move (got: %s)"
+			% status.text)
+	_check(_morris_save_ply() == 5, "the capture advances the saved ply")
+	_check(detail != null and detail.text.contains("Last: 9-1*13"),
+			"the capture notation reaches the detail line")
+	_check(board.capture_points.is_empty() and board.selection == -1,
+			"capture state clears after the move")
+
+	# Undo restores the position before the mill move.
+	undo_btn.pressed.emit()
+	await _frame()
+	_check(status.text == "Red to move — step to an adjacent point",
+			"undo restores the pre-mill position")
+	_check(_morris_save_ply() == 4, "undo rewinds the saved ply")
+
+	# vs-AI: red repeats the mill, Easy answers for green, undo rewinds.
+	var vs_ai_btn: Button = screen.get_node_or_null(
+			"Margin/Content/ModeRow/VsAiButton")
+	var easy_btn: Button = screen.get_node_or_null(
+			"Margin/Content/DifficultyRow/EasyButton")
+	var badge_label: Label = screen.get_node_or_null(
+			"Margin/Content/ModeRow/AiBadge/AiBadgeRow/AiBadgeLabel")
+	if vs_ai_btn != null and easy_btn != null:
+		vs_ai_btn.pressed.emit()
+		await _frame()
+		easy_btn.pressed.emit()
+		await _frame()
+		if badge_label != null:
+			_check(badge_label.text == "AI: Easy",
+					"the badge follows the difficulty")
+		board.emit_signal("point_activated", 9)
+		await _frame()
+		board.emit_signal("point_activated", 1)
+		await _frame()
+		board.emit_signal("point_activated", 12)
+		await _frame()
+		_check(status.text.contains("thinking")
+				or status.text == "Red to move — step to an adjacent point",
+				"the capture hands the turn to the AI (got: %s)"
+				% status.text)
+		var frames := 0
+		while _morris_save_ply() != 6 and frames < 300:
+			await _frame()
+			frames += 1
+		_check(_morris_save_ply() == 6, "the AI answers the move (ply 6)")
+		_check(status.text == "Red to move — step to an adjacent point",
+				"the turn returns to the human (got: %s)" % status.text)
+		undo_btn.pressed.emit()
+		await _frame()
+		_check(_morris_save_ply() == 4,
+				"undo rewinds the whole exchange to the stored position")
+		_check(not undo_btn.disabled, "history from the crafted position remains")
+
+	# A fresh placement position: reds 0/2 can mill with P1 at once.
+	_app.navigation.go(&"main_menu")
+	await _frame()
+	await _frame()
+	_write_morris_save({
+		"version": 1,
+		"board": "R.R.........GG.......GG.",
+		"to_move": "red",
+		"hand_red": 3,
+		"hand_green": 3,
+		"ply": 0,
+		"plies_since_capture": 0,
+		"result": "none",
+		"history": ["R.R.........GG.......GG.|red|3|3"],
+	})
+	_app.navigation.go(&"nine_mens_morris")
+	await _frame()
+	await _frame()
+	screen = null
+	for child in screen_container.get_children():
+		if child.name == "NineMensMorrisScreen":
+			screen = child
+	_check(screen != null, "the screen reloads from the new save")
+	if screen == null:
+		return
+	status = screen.get_node_or_null("Margin/Content/StatusLabel")
+	detail = screen.get_node_or_null("Margin/Content/DetailLabel")
+	undo_btn = screen.get_node_or_null("Margin/Content/Controls/UndoButton")
+	board = screen.get_node_or_null("Margin/Content/Board")
+	if status == null or detail == null or undo_btn == null or board == null:
+		return
+	_check(status.text == "Red to move — place a piece",
+			"the placement position loads (got: %s)" % status.text)
+	_check(detail.text.contains("Hand 3 · 3"),
+			"detail shows the hands to place")
+	_check(undo_btn.disabled, "undo starts disabled again")
+	hot_seat_btn = screen.get_node_or_null(
+			"Margin/Content/ModeRow/HotSeatButton")
+	if hot_seat_btn != null:
+		hot_seat_btn.pressed.emit()
+		await _frame()
+
+	# Placement input: P1 mills 0-1-2, the capture completes the move.
+	board.emit_signal("point_activated", 1)
+	await _frame()
+	_check(status.text == "Red to capture — remove a ringed enemy piece",
+			"a placement mill opens the capture step (got: %s)" % status.text)
+	_check(board.capture_points == [12, 13, 21, 22],
+			"the placement rings every free enemy (got: %s)"
+			% [board.capture_points])
+	board.emit_signal("point_activated", 13)
+	await _frame()
+	_check(status.text == "Green to move — place a piece",
+			"the capture completes the placement (got: %s)" % status.text)
+	_check(_morris_save_ply() == 1, "the placement advanced the saved ply")
+	_check(detail.text.contains("Last: P1*13"),
+			"the placement notation reaches the detail line")
+	undo_btn.pressed.emit()
+	await _frame()
+	_check(status.text == "Red to move — place a piece"
+			and _morris_save_ply() == 0 and undo_btn.disabled,
+			"undo restores the crafted placement position")
+
+	# vs-AI: red repeats the placement mill, Easy answers for green.
+	vs_ai_btn = screen.get_node_or_null(
+			"Margin/Content/ModeRow/VsAiButton")
+	easy_btn = screen.get_node_or_null(
+			"Margin/Content/DifficultyRow/EasyButton")
+	if vs_ai_btn != null and easy_btn != null:
+		vs_ai_btn.pressed.emit()
+		await _frame()
+		easy_btn.pressed.emit()
+		await _frame()
+		board.emit_signal("point_activated", 1)
+		await _frame()
+		board.emit_signal("point_activated", 12)
+		await _frame()
+		var wait_frames := 0
+		while _morris_save_ply() != 2 and wait_frames < 300:
+			await _frame()
+			wait_frames += 1
+		_check(_morris_save_ply() == 2, "the AI places its piece (ply 2)")
+		_check(status.text == "Red to move — place a piece",
+				"the turn returns to the placer (got: %s)" % status.text)
+		undo_btn.pressed.emit()
+		await _frame()
+		_check(_morris_save_ply() == 0 and undo_btn.disabled,
+				"undo rewinds the whole placement exchange")
+
+	await _test_morris_online_ui(screen, status, undo_btn)
+
+
+## Phase 10 offline online-UI contract: same node paths as the other
+## screens (one shared session service), nine-mens-morris game key,
+## sign-in hint while signed out, and the offline save untouched.
+func _test_morris_online_ui(screen: Control, status: Label,
+		undo_btn: Button) -> void:
+	var online_btn: Button = screen.get_node_or_null(
+			"Margin/Content/ModeRow/OnlineButton")
+	var online_row: Control = screen.get_node_or_null("Margin/Content/OnlineRow")
+	var new_btn: Button = screen.get_node_or_null(
+			"Margin/Content/OnlineRow/OnlineActions/NewMatchButton")
+	var join_btn: Button = screen.get_node_or_null(
+			"Margin/Content/OnlineRow/OnlineActions/JoinButton")
+	var code_field: LineEdit = screen.get_node_or_null(
+			"Margin/Content/OnlineRow/OnlineActions/MatchIdField")
+	var online_label: Label = screen.get_node_or_null(
+			"Margin/Content/OnlineRow/OnlineStatusLabel")
+	var resign_btn: Button = screen.get_node_or_null(
+			"Margin/Content/Controls/ResignButton")
+	var rematch_btn: Button = screen.get_node_or_null(
+			"Margin/Content/Controls/RematchButton")
+	var restart_btn: Button = screen.get_node_or_null(
+			"Margin/Content/Controls/RestartButton")
+	var hot_seat_btn: Button = screen.get_node_or_null(
+			"Margin/Content/ModeRow/HotSeatButton")
+	var difficulty_row: Control = screen.get_node_or_null(
+			"Margin/Content/DifficultyRow")
+	var badge: Control = screen.get_node_or_null("Margin/Content/ModeRow/AiBadge")
+	_check(_app.online != null, "online match service is wired into App")
+	_check(online_btn != null and online_row != null and new_btn != null
+			and join_btn != null and code_field != null and online_label != null
+			and resign_btn != null and rematch_btn != null and restart_btn != null
+			and hot_seat_btn != null and difficulty_row != null and badge != null,
+			"online controls exist for nine men's morris")
+	if online_btn == null or online_row == null or resign_btn == null \
+			or rematch_btn == null or restart_btn == null:
+		return
+	_check(not online_row.visible, "online panel hidden in hot seat mode")
+	_check(not resign_btn.visible and not rematch_btn.visible,
+			"resign/rematch hidden outside online mode")
+	_check(not _app.online.is_connected_to_server(),
+			"no socket before the player enters online mode")
+
+	var save_before := _morris_save_ply()
+	online_btn.pressed.emit()
+	await _frame()
+	await _frame()
+	_check(online_row.visible, "online panel appears in online mode")
+	_check(not undo_btn.visible and not restart_btn.visible,
+			"offline controls hide in online mode")
+	_check(not difficulty_row.visible and not badge.visible,
+			"AI controls hide in online mode")
+	_check(not resign_btn.visible and not rematch_btn.visible,
+			"resign/rematch wait for a live match")
+	_check(online_btn.button_pressed, "online toggle shows as pressed")
+	_check(not _app.auth.is_authenticated(),
+			"entering online mode creates no session offline")
+	_check(online_label.text == "Sign in to play online matches",
+			"online label asks for sign-in (got: %s)" % online_label.text)
+	_check(status.text == "Sign in to play online",
+			"status asks for sign-in (got: %s)" % status.text)
+	_check(_app.online.game_key == OnlineMatchService.NINE_MENS_MORRIS_KEY,
+			"the shared session service points at the nine-mens-morris key")
+	_check(_morris_save_ply() == save_before,
+			"entering online mode leaves the offline save untouched")
+	_check(not _app.online.is_connected_to_server(),
+			"no socket opens without a signed-in player")
+
+	hot_seat_btn.pressed.emit()
+	await _frame()
+	await _frame()
+	_check(not online_row.visible, "online panel hides when leaving online mode")
+	_check(undo_btn.visible and restart_btn.visible, "offline controls return")
+	_check(not online_btn.button_pressed, "online toggle releases")
+	_check(status.text == "Red to move — place a piece",
+			"offline position restored after online mode (got: %s)"
+			% status.text)
+	_check(_morris_save_ply() == save_before,
+			"the offline save is still untouched")
+
+
 # ----------------------------------------------------------------------
 
 func _check(condition: bool, label: String) -> void:
@@ -857,6 +1231,33 @@ func _write_solah_save(payload: Dictionary) -> void:
 	if file == null:
 		_failures += 1
 		printerr("FAIL: cannot write user://solah_seedi_save.json")
+		return
+	file.store_string(JSON.stringify(payload))
+	file.close()
+
+
+## The ply from the Nine Men's Morris screen's save file (or -1).
+func _morris_save_ply() -> int:
+	if not FileAccess.file_exists("user://nine_mens_morris_save.json"):
+		return -1
+	var file := FileAccess.open("user://nine_mens_morris_save.json",
+			FileAccess.READ)
+	if file == null:
+		return -1
+	var data: Variant = JSON.parse_string(file.get_as_text())
+	file.close()
+	if not (data is Dictionary) or not (data as Dictionary).has("ply"):
+		return -1
+	return int((data as Dictionary)["ply"])
+
+
+## Writes a Nine Men's Morris position before the screen loads it.
+func _write_morris_save(payload: Dictionary) -> void:
+	var file := FileAccess.open("user://nine_mens_morris_save.json",
+			FileAccess.WRITE)
+	if file == null:
+		_failures += 1
+		printerr("FAIL: cannot write user://nine_mens_morris_save.json")
 		return
 	file.store_string(JSON.stringify(payload))
 	file.close()

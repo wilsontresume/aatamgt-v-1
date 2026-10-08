@@ -101,6 +101,8 @@ func _ready() -> void:
 	App.online.state_applied.connect(_on_online_state)
 	App.online.match_changed.connect(_on_online_match_changed)
 	App.online.match_completed.connect(_on_online_completed)
+	if App.online.consume_auto_online():
+		_set_online_mode()
 	_refresh()
 
 

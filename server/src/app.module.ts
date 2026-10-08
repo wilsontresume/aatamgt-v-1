@@ -24,6 +24,7 @@ import { LeaderboardsModule } from './leaderboards/leaderboards.module';
 import { RewardsModule } from './rewards/rewards.module';
 import { AdsModule } from './ads/ads.module';
 import { FriendsModule } from './friends/friends.module';
+import { ChallengesModule } from './challenges/challenges.module';
 import { NotificationsModule } from './notifications/notifications.module';
 import { AdminModule } from './admin/admin.module';
 
@@ -60,6 +61,7 @@ import { AdminModule } from './admin/admin.module';
     RewardsModule,
     AdsModule,
     FriendsModule,
+    ChallengesModule,
     NotificationsModule,
     AdminModule,
   ],

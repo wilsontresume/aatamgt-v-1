@@ -252,6 +252,30 @@ func authenticated_post(path: String, payload: Dictionary) -> Dictionary:
 	return res
 
 
+## Authenticated DELETE with the same one-shot refresh contract.
+## Used by social endpoints that address rows by id (Phase 11 friends).
+func authenticated_delete(path: String) -> Dictionary:
+	if not is_authenticated():
+		return _fail(ApiClient.ErrorKind.EXPIRED_SESSION,
+				ApiClient.error_text(ApiClient.ErrorKind.EXPIRED_SESSION), 401)
+
+	var res: Dictionary = await _api.request_json(HTTPClient.METHOD_DELETE, path,
+			{}, get_access_token())
+	if res.status == 401:
+		if await _refresh_tokens():
+			res = await _api.request_json(HTTPClient.METHOD_DELETE, path, {},
+					get_access_token())
+		elif last_error in [ApiClient.ErrorKind.NETWORK, ApiClient.ErrorKind.SERVER_UNAVAILABLE]:
+			return _fail(last_error, last_message, 0)
+		if res.status == 401:
+			_expire()
+			return _fail(ApiClient.ErrorKind.EXPIRED_SESSION,
+					ApiClient.error_text(ApiClient.ErrorKind.EXPIRED_SESSION), 401)
+	last_error = res.error_kind
+	last_message = str(res.get("message", ""))
+	return res
+
+
 ## Phase 7: reads the authoritative wallet (GET /wallet). The response
 ## body carries {currency, balance, version} — the caller feeds `balance`
 ## into CoinService.set_balance_from_server; nothing here mints coins.

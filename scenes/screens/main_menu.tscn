@@ -53,6 +53,14 @@ text = "Profile"
 variant = 1
 text = "Settings"
 
+[node name="FriendsButton" parent="Margin/Content" instance=ExtResource("3_btn")]
+variant = 1
+text = "Friends"
+
+[node name="HistoryButton" parent="Margin/Content" instance=ExtResource("3_btn")]
+variant = 1
+text = "History"
+
 [node name="SpacerBottom" type="Control" parent="Margin/Content"]
 size_flags_vertical = 3
 

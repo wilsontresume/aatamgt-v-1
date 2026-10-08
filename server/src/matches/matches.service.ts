@@ -7,7 +7,7 @@ import {
   NotFoundException,
 } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
-import { GameMatch, MatchPlayer, Prisma } from '@prisma/client';
+import { GameMatch, MatchPlayer, MatchStatus, Prisma } from '@prisma/client';
 import { PrismaService } from '../prisma/prisma.service';
 import { GamesService } from '../games/games.service';
 import { MatchEventsService } from '../events/match-events.service';
@@ -626,11 +626,17 @@ export class MatchesService {
     this.armTurn(matchId, new Date(serverState.turnDeadlineAt));
   }
 
-  listMy(userId: string) {
+  listMy(userId: string, status?: string) {
+    if (status && !Object.values(MatchStatus).includes(status as MatchStatus)) {
+      throw new BadRequestException('Unknown match status');
+    }
     return this.prisma.gameMatch.findMany({
-      where: { players: { some: { userId } } },
+      where: {
+        players: { some: { userId } },
+        ...(status ? { status: status as MatchStatus } : {}),
+      },
       orderBy: { createdAt: 'desc' },
-      take: 25,
+      take: status === 'COMPLETED' ? 50 : 25,
       include: { players: { include: { user: { select: { username: true } } } } },
     });
   }

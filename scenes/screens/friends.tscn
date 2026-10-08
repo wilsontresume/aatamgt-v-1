@@ -1,0 +1,163 @@
+[gd_scene load_steps=4 format=3]
+
+[ext_resource type="Script" path="res://src/ui/screens/friends.gd" id="1_fr"]
+[ext_resource type="PackedScene" path="res://scenes/components/top_bar.tscn" id="2_tb"]
+[ext_resource type="PackedScene" path="res://scenes/components/button.tscn" id="3_btn"]
+
+[node name="Friends" type="Control"]
+anchor_right = 1.0
+anchor_bottom = 1.0
+grow_horizontal = 2
+grow_vertical = 2
+script = ExtResource("1_fr")
+
+[node name="Margin" type="MarginContainer" parent="."]
+anchor_right = 1.0
+anchor_bottom = 1.0
+grow_horizontal = 2
+grow_vertical = 2
+theme_override_constants/margin_left = 24
+theme_override_constants/margin_top = 20
+theme_override_constants/margin_right = 24
+theme_override_constants/margin_bottom = 24
+
+[node name="Content" type="VBoxContainer" parent="Margin"]
+theme_override_constants/separation = 12
+
+[node name="TopBar" parent="Margin/Content" instance=ExtResource("2_tb")]
+title = "Friends"
+show_back = true
+show_coins = false
+
+[node name="AddPanel" type="PanelContainer" parent="Margin/Content"]
+theme_type_variation = "Card"
+
+[node name="AddBody" type="VBoxContainer" parent="Margin/Content/AddPanel"]
+theme_override_constants/separation = 8
+
+[node name="AddHeading" type="Label" parent="Margin/Content/AddPanel/AddBody"]
+theme_type_variation = "Heading"
+text = "Add friend"
+
+[node name="AddRow" type="HBoxContainer" parent="Margin/Content/AddPanel/AddBody"]
+theme_override_constants/separation = 8
+
+[node name="UsernameField" type="LineEdit" parent="Margin/Content/AddPanel/AddBody/AddRow"]
+layout_mode = 2
+size_flags_horizontal = 3
+placeholder_text = "Username"
+max_length = 24
+
+[node name="AddButton" parent="Margin/Content/AddPanel/AddBody/AddRow" instance=ExtResource("3_btn")]
+custom_minimum_size = Vector2(110, 0)
+variant = 0
+text = "Send"
+
+[node name="AddHint" type="Label" parent="Margin/Content/AddPanel/AddBody"]
+theme_type_variation = "Caption"
+autowrap_mode = 3
+text = ""
+
+[node name="IncomingPanel" type="PanelContainer" parent="Margin/Content"]
+theme_type_variation = "Card"
+
+[node name="IncomingBody" type="VBoxContainer" parent="Margin/Content/IncomingPanel"]
+theme_override_constants/separation = 8
+
+[node name="IncomingHeading" type="Label" parent="Margin/Content/IncomingPanel/IncomingBody"]
+theme_type_variation = "Heading"
+text = "Incoming requests"
+
+[node name="IncomingList" type="VBoxContainer" parent="Margin/Content/IncomingPanel/IncomingBody"]
+theme_override_constants/separation = 6
+
+[node name="IncomingHint" type="Label" parent="Margin/Content/IncomingPanel/IncomingBody"]
+theme_type_variation = "Caption"
+autowrap_mode = 3
+text = "No pending requests."
+
+[node name="FriendsPanel" type="PanelContainer" parent="Margin/Content"]
+theme_type_variation = "Card"
+
+[node name="FriendsBody" type="VBoxContainer" parent="Margin/Content/FriendsPanel"]
+theme_override_constants/separation = 8
+
+[node name="FriendsHeading" type="Label" parent="Margin/Content/FriendsPanel/FriendsBody"]
+theme_type_variation = "Heading"
+text = "Friends"
+
+[node name="FriendsList" type="VBoxContainer" parent="Margin/Content/FriendsPanel/FriendsBody"]
+theme_override_constants/separation = 6
+
+[node name="FriendsHint" type="Label" parent="Margin/Content/FriendsPanel/FriendsBody"]
+theme_type_variation = "Caption"
+autowrap_mode = 3
+text = "No friends yet — add one above."
+
+[node name="ChallengesPanel" type="PanelContainer" parent="Margin/Content"]
+theme_type_variation = "Card"
+
+[node name="ChallengesBody" type="VBoxContainer" parent="Margin/Content/ChallengesPanel"]
+theme_override_constants/separation = 8
+
+[node name="ChallengesHeading" type="Label" parent="Margin/Content/ChallengesPanel/ChallengesBody"]
+theme_type_variation = "Heading"
+text = "Challenges"
+
+[node name="ChallengeList" type="VBoxContainer" parent="Margin/Content/ChallengesPanel/ChallengesBody"]
+theme_override_constants/separation = 6
+
+[node name="ChallengeHint" type="Label" parent="Margin/Content/ChallengesPanel/ChallengesBody"]
+theme_type_variation = "Caption"
+autowrap_mode = 3
+text = "No pending challenges."
+
+[node name="BlockedPanel" type="PanelContainer" parent="Margin/Content"]
+theme_type_variation = "Card"
+
+[node name="BlockedBody" type="VBoxContainer" parent="Margin/Content/BlockedPanel"]
+theme_override_constants/separation = 8
+
+[node name="BlockedHeading" type="Label" parent="Margin/Content/BlockedPanel/BlockedBody"]
+theme_type_variation = "Heading"
+text = "Blocked"
+
+[node name="BlockedList" type="VBoxContainer" parent="Margin/Content/BlockedPanel/BlockedBody"]
+theme_override_constants/separation = 6
+
+[node name="BlockedHint" type="Label" parent="Margin/Content/BlockedPanel/BlockedBody"]
+theme_type_variation = "Caption"
+autowrap_mode = 3
+text = "No one is blocked."
+
+[node name="CodePanel" type="PanelContainer" parent="Margin/Content"]
+theme_type_variation = "Card"
+
+[node name="CodeBody" type="VBoxContainer" parent="Margin/Content/CodePanel"]
+theme_override_constants/separation = 8
+
+[node name="CodeHeading" type="Label" parent="Margin/Content/CodePanel/CodeBody"]
+theme_type_variation = "Heading"
+text = "Have a code?"
+
+[node name="CodeRow" type="HBoxContainer" parent="Margin/Content/CodePanel/CodeBody"]
+theme_override_constants/separation = 8
+
+[node name="CodeField" type="LineEdit" parent="Margin/Content/CodePanel/CodeBody/CodeRow"]
+layout_mode = 2
+size_flags_horizontal = 3
+placeholder_text = "Challenge code"
+max_length = 16
+
+[node name="OpenButton" parent="Margin/Content/CodePanel/CodeBody/CodeRow" instance=ExtResource("3_btn")]
+custom_minimum_size = Vector2(110, 0)
+variant = 0
+text = "Open"
+
+[node name="CodeHint" type="Label" parent="Margin/Content/CodePanel/CodeBody"]
+theme_type_variation = "Caption"
+autowrap_mode = 3
+text = ""
+
+[node name="Spacer" type="Control" parent="Margin/Content"]
+size_flags_vertical = 3

@@ -28,7 +28,8 @@ const GAMES = [
     key: 'nine-mens-morris',
     name: "Nine Men's Morris",
     slug: 'nine-mens-morris',
-    description: 'Mill game with three phases. Rules ship in a later phase.',
+    description:
+      "Nine Men's Morris — classic mill game for 2 players on a 24-point board. Place nine pieces, then slide (fly when three remain) and form mills to capture.",
     minPlayers: 2,
     maxPlayers: 2,
   },

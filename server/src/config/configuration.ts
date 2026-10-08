@@ -37,6 +37,13 @@ export interface AppConfig {
     interstitialAfterLosses: number;
     interstitialCooldownMatches: number;
   };
+  social: {
+    challengeTtlSeconds: number;
+    challengeCreatePerHour: number;
+    challengePendingLimit: number;
+    friendRequestPerHour: number;
+    friendPendingLimit: number;
+  };
   logLevel: string;
 }
 
@@ -82,6 +89,13 @@ export default registerAs<AppConfig>('app', () => {
       interstitialAfterWins: num(process.env.ADS_INTERSTITIAL_AFTER_WINS, 3),
       interstitialAfterLosses: num(process.env.ADS_INTERSTITIAL_AFTER_LOSSES, 5),
       interstitialCooldownMatches: num(process.env.ADS_INTERSTITIAL_COOLDOWN_MATCHES, 2),
+    },
+    social: {
+      challengeTtlSeconds: num(process.env.CHALLENGE_TTL_SECONDS, 900),
+      challengeCreatePerHour: num(process.env.CHALLENGE_CREATE_PER_HOUR, 20),
+      challengePendingLimit: num(process.env.CHALLENGE_PENDING_LIMIT, 5),
+      friendRequestPerHour: num(process.env.FRIEND_REQUEST_PER_HOUR, 20),
+      friendPendingLimit: num(process.env.FRIEND_PENDING_LIMIT, 10),
     },
     logLevel: process.env.LOG_LEVEL ?? 'info',
   };

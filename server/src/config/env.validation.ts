@@ -105,6 +105,31 @@ export class EnvironmentVariables {
   @IsInt()
   @Min(0)
   ADS_INTERSTITIAL_COOLDOWN_MATCHES: number;
+
+  @IsOptional()
+  @IsInt()
+  @Min(30)
+  CHALLENGE_TTL_SECONDS: number;
+
+  @IsOptional()
+  @IsInt()
+  @Min(1)
+  CHALLENGE_CREATE_PER_HOUR: number;
+
+  @IsOptional()
+  @IsInt()
+  @Min(1)
+  CHALLENGE_PENDING_LIMIT: number;
+
+  @IsOptional()
+  @IsInt()
+  @Min(1)
+  FRIEND_REQUEST_PER_HOUR: number;
+
+  @IsOptional()
+  @IsInt()
+  @Min(1)
+  FRIEND_PENDING_LIMIT: number;
 }
 
 const defaults: Record<string, unknown> = {
@@ -148,6 +173,11 @@ export function validate(config: Record<string, unknown>): EnvironmentVariables 
     ADS_INTERSTITIAL_AFTER_WINS: toNumber(config.ADS_INTERSTITIAL_AFTER_WINS, 3),
     ADS_INTERSTITIAL_AFTER_LOSSES: toNumber(config.ADS_INTERSTITIAL_AFTER_LOSSES, 5),
     ADS_INTERSTITIAL_COOLDOWN_MATCHES: toNumber(config.ADS_INTERSTITIAL_COOLDOWN_MATCHES, 2),
+    CHALLENGE_TTL_SECONDS: toNumber(config.CHALLENGE_TTL_SECONDS, 900),
+    CHALLENGE_CREATE_PER_HOUR: toNumber(config.CHALLENGE_CREATE_PER_HOUR, 20),
+    CHALLENGE_PENDING_LIMIT: toNumber(config.CHALLENGE_PENDING_LIMIT, 5),
+    FRIEND_REQUEST_PER_HOUR: toNumber(config.FRIEND_REQUEST_PER_HOUR, 20),
+    FRIEND_PENDING_LIMIT: toNumber(config.FRIEND_PENDING_LIMIT, 10),
   };
 
   const instance = new EnvironmentVariables();

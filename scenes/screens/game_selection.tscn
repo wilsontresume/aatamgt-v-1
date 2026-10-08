@@ -31,7 +31,7 @@ show_coins = true
 
 [node name="SubtitleLabel" type="Label" parent="Margin/Content"]
 theme_type_variation = "Caption"
-text = "Pick a game to play. Aadu Puli Aattam and Solah Seedi are playable."
+text = "Pick a game to play. Aadu Puli Aattam, Solah Seedi and Nine Men's Morris are playable."
 
 [node name="AaduPuliCard" parent="Margin/Content" instance=ExtResource("3_card")]
 title_text = "Aadu Puli Aattam"
@@ -46,7 +46,7 @@ badge_text = "Playable"
 [node name="MorrisCard" parent="Margin/Content" instance=ExtResource("3_card")]
 title_text = "Nine Men's Morris"
 subtitle_text = "Mill game · three phases"
-badge_text = "Coming soon"
+badge_text = "Playable"
 
 [node name="Spacer" type="Control" parent="Margin/Content"]
 size_flags_vertical = 3
