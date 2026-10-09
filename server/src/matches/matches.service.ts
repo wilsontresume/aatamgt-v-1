@@ -12,6 +12,7 @@ import { PrismaService } from '../prisma/prisma.service';
 import { GamesService } from '../games/games.service';
 import { MatchEventsService } from '../events/match-events.service';
 import { MatchClockService } from './match-clock.service';
+import { RankingsService } from '../rankings/rankings.service';
 import { AppConfig } from '../config/configuration';
 import {
   CompletionReason,
@@ -61,6 +62,7 @@ export class MatchesService {
     private readonly games: GamesService,
     private readonly events: MatchEventsService,
     private readonly clock: MatchClockService,
+    private readonly rankings: RankingsService,
     config: ConfigService,
   ) {
     this.cfg = config.get<AppConfig>('app') as AppConfig;
@@ -352,7 +354,7 @@ export class MatchesService {
 
       let results: Map<string, 'WIN' | 'LOSS' | 'DRAW'> | null = null;
       if (completion) {
-        results = await this.applyCompletion(tx, match.players, completion);
+        results = await this.applyCompletion(tx, match, completion);
       }
 
       return {
@@ -433,7 +435,7 @@ export class MatchesService {
 
       const winnerSeat = player.seat === 0 ? 1 : 0;
       const completion: MatchCompletion = { winnerSeat, reason: 'RESIGN' };
-      const results = await this.applyCompletion(tx, match.players, completion);
+      const results = await this.applyCompletion(tx, match, completion);
       const updated = await tx.gameMatch.update({
         where: { id: matchId },
         data: {
@@ -470,7 +472,7 @@ export class MatchesService {
         if (!view || view.finished) return null;
         const loserSeat = view.seatToMove;
         const completion: MatchCompletion = { winnerSeat: loserSeat === 0 ? 1 : 0, reason: 'TIMEOUT' };
-        const results = await this.applyCompletion(tx, match.players, completion);
+        const results = await this.applyCompletion(tx, match, completion);
         const updated = await tx.gameMatch.update({
           where: { id: matchId },
           data: {
@@ -508,7 +510,7 @@ export class MatchesService {
           winnerSeat: player.seat === 0 ? 1 : 0,
           reason: 'DISCONNECT',
         };
-        const results = await this.applyCompletion(tx, match.players, completion);
+        const results = await this.applyCompletion(tx, match, completion);
         const updated = await tx.gameMatch.update({
           where: { id: matchId },
           data: {
@@ -668,9 +670,10 @@ export class MatchesService {
   /** Records WIN/LOSS/DRAW for both players and updates profiles (server-side only). */
   private async applyCompletion(
     tx: Prisma.TransactionClient,
-    players: MatchPlayer[],
+    match: { id: string; gameKey: string; players: MatchPlayer[] },
     completion: MatchCompletion,
   ): Promise<Map<string, 'WIN' | 'LOSS' | 'DRAW'>> {
+    const players = match.players;
     const results = new Map<string, 'WIN' | 'LOSS' | 'DRAW'>();
     for (const player of players) {
       const result: 'WIN' | 'LOSS' | 'DRAW' =
@@ -711,6 +714,10 @@ export class MatchesService {
         },
       });
     }
+
+    // Competitive per-game ratings (Phase 14): same transaction, guarded
+    // by the unique (matchId, userId) event key, rated games only.
+    await this.rankings.applyMatchResult(tx, match, completion, results);
     return results;
   }
 

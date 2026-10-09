@@ -17,6 +17,17 @@ func _ready() -> void:
 	_avatar.set_avatar_size(avatar_size)
 	App.user.profile_changed.connect(_on_profile_changed)
 	_on_profile_changed(App.user.get_profile())
+	# Phase 12: equipped profile picture + frame come from the server
+	# inventory; before the first fetch both styles are empty (classic).
+	App.cosmetics.inventory_changed.connect(_apply_cosmetics)
+	_apply_cosmetics()
+
+
+func _apply_cosmetics() -> void:
+	_avatar.set_style(CosmeticService.pfp_style(
+			App.cosmetics.equipped_key("PROFILE_PICTURE")))
+	_avatar.set_frame(CosmeticService.frame_style(
+			App.cosmetics.equipped_key("PROFILE_FRAME")))
 
 
 func _on_profile_changed(profile: Dictionary) -> void:

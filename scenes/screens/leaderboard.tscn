@@ -1,0 +1,118 @@
+[gd_scene load_steps=4 format=3]
+
+[ext_resource type="Script" path="res://src/ui/screens/leaderboard.gd" id="1_lb"]
+[ext_resource type="PackedScene" path="res://scenes/components/top_bar.tscn" id="2_tb"]
+[ext_resource type="PackedScene" path="res://scenes/components/button.tscn" id="3_btn"]
+
+[node name="Leaderboard" type="Control"]
+anchor_right = 1.0
+anchor_bottom = 1.0
+grow_horizontal = 2
+grow_vertical = 2
+script = ExtResource("1_lb")
+
+[node name="Margin" type="MarginContainer" parent="."]
+anchor_right = 1.0
+anchor_bottom = 1.0
+grow_horizontal = 2
+grow_vertical = 2
+theme_override_constants/margin_left = 24
+theme_override_constants/margin_top = 20
+theme_override_constants/margin_right = 24
+theme_override_constants/margin_bottom = 24
+
+[node name="Content" type="VBoxContainer" parent="Margin"]
+theme_override_constants/separation = 12
+
+[node name="TopBar" parent="Margin/Content" instance=ExtResource("2_tb")]
+title = "Rankings"
+show_back = true
+show_coins = false
+
+[node name="SeasonLabel" type="Label" parent="Margin/Content"]
+theme_type_variation = "Caption"
+text = ""
+
+[node name="GameTabs" type="HBoxContainer" parent="Margin/Content"]
+theme_override_constants/separation = 8
+
+[node name="AaduPuliTab" parent="Margin/Content/GameTabs" instance=ExtResource("3_btn")]
+toggle_mode = true
+custom_minimum_size = Vector2(0, 40)
+variant = 1
+text = "Aadu Puli"
+
+[node name="SoldiersTab" parent="Margin/Content/GameTabs" instance=ExtResource("3_btn")]
+toggle_mode = true
+custom_minimum_size = Vector2(0, 40)
+variant = 1
+text = "16 Soldiers"
+
+[node name="MorrisTab" parent="Margin/Content/GameTabs" instance=ExtResource("3_btn")]
+toggle_mode = true
+custom_minimum_size = Vector2(0, 40)
+variant = 1
+text = "Nine Men's Morris"
+
+[node name="Scroll" type="ScrollContainer" parent="Margin/Content"]
+layout_mode = 2
+size_flags_vertical = 3
+horizontal_scroll_mode = 0
+
+[node name="Column" type="VBoxContainer" parent="Margin/Content/Scroll"]
+layout_mode = 2
+size_flags_horizontal = 3
+theme_override_constants/separation = 12
+
+[node name="StandingPanel" type="PanelContainer" parent="Margin/Content/Scroll/Column"]
+layout_mode = 2
+
+[node name="StandingBody" type="VBoxContainer" parent="Margin/Content/Scroll/Column/StandingPanel"]
+layout_mode = 2
+theme_override_constants/separation = 8
+
+[node name="StandingTitle" type="Label" parent="Margin/Content/Scroll/Column/StandingPanel/StandingBody"]
+layout_mode = 2
+theme_type_variation = "Heading"
+text = "Your standing"
+
+[node name="StandingRow" type="HBoxContainer" parent="Margin/Content/Scroll/Column/StandingPanel/StandingBody"]
+layout_mode = 2
+theme_override_constants/separation = 10
+
+[node name="BoardPanel" type="PanelContainer" parent="Margin/Content/Scroll/Column"]
+layout_mode = 2
+
+[node name="BoardBody" type="VBoxContainer" parent="Margin/Content/Scroll/Column/BoardPanel"]
+layout_mode = 2
+theme_override_constants/separation = 8
+
+[node name="BoardTitle" type="Label" parent="Margin/Content/Scroll/Column/BoardPanel/BoardBody"]
+layout_mode = 2
+theme_type_variation = "Heading"
+text = "Top players"
+
+[node name="BoardRows" type="VBoxContainer" parent="Margin/Content/Scroll/Column/BoardPanel/BoardBody"]
+layout_mode = 2
+theme_override_constants/separation = 6
+
+[node name="ResultsPanel" type="PanelContainer" parent="Margin/Content/Scroll/Column"]
+layout_mode = 2
+
+[node name="ResultsBody" type="VBoxContainer" parent="Margin/Content/Scroll/Column/ResultsPanel"]
+layout_mode = 2
+theme_override_constants/separation = 8
+
+[node name="ResultsTitle" type="Label" parent="Margin/Content/Scroll/Column/ResultsPanel/ResultsBody"]
+layout_mode = 2
+theme_type_variation = "Heading"
+text = "Recent results"
+
+[node name="ResultRows" type="VBoxContainer" parent="Margin/Content/Scroll/Column/ResultsPanel/ResultsBody"]
+layout_mode = 2
+theme_override_constants/separation = 6
+
+[node name="HintLabel" type="Label" parent="Margin/Content"]
+theme_type_variation = "Caption"
+autowrap_mode = 3
+text = ""

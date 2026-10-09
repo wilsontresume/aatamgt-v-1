@@ -34,6 +34,14 @@ var state: AaduPuliGameState = null
 var selection: int = -1
 var target_points: Array[int] = []
 var placing: bool = false
+## Phase 12: equipped board-skin palette from App.cosmetics
+## ({} = classic surface).
+var skin := {}
+
+
+func set_skin(palette: Dictionary) -> void:
+	skin = palette if palette != null else {}
+	queue_redraw()
 
 
 func configure(p_state: AaduPuliGameState, p_selection: int,
@@ -104,19 +112,20 @@ func _hit_radius() -> float:
 
 func _draw_panel() -> void:
 	var panel := StyleBoxFlat.new()
-	panel.bg_color = AppTheme.C_SURFACE
+	panel.bg_color = skin.get("bg", AppTheme.C_SURFACE)
 	panel.set_corner_radius_all(int(AppTheme.R_CARD))
 	panel.set_border_width_all(1)
-	panel.border_color = AppTheme.C_BORDER
+	panel.border_color = skin.get("line", AppTheme.C_BORDER)
 	draw_style_box(panel, Rect2(Vector2.ZERO, size))
 
 
 func _draw_lines() -> void:
+	var line_color: Color = skin.get("line", AppTheme.C_BORDER)
 	for line in AaduPuliRules.LINES:
 		var points := PackedVector2Array()
 		for point in line:
 			points.append(_screen_pos(int(point)))
-		draw_polyline(points, AppTheme.C_BORDER, 2.0, true)
+		draw_polyline(points, line_color, 2.0, true)
 
 
 func _draw_point(point: int) -> void:

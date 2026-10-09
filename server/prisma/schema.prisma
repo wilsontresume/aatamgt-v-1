@@ -56,6 +56,10 @@ model User {
   challengesGot   Challenge[]    @relation("challenge_invitee")
   leaderboardRows LeaderboardEntry[]
   auditLogs       AdminAuditLog[]
+  userCosmetics   UserCosmetic[]
+  gameRatings     GameRating[]
+  ratingEvents    RatingEvent[]
+  purchases       Purchase[]
 
   @@index([status])
   @@index([createdAt])
@@ -428,4 +432,188 @@ model AdminAuditLog {
 
   @@index([actorUserId, createdAt])
   @@index([action, createdAt])
+}
+
+// ---------------------------------------------------------------------------
+// Cosmetics (Phase 12) — server-owned inventory, no real-money purchases.
+// ---------------------------------------------------------------------------
+
+enum CosmeticCategory {
+  BOARD_SKIN
+  PROFILE_PICTURE
+  PROFILE_FRAME
+  VICTORY_ANIMATION
+  CAPTURE_ANIMATION
+}
+
+enum CosmeticTier {
+  FREE
+  PREMIUM
+}
+
+model Cosmetic {
+  id               String           @id @default(cuid())
+  key              String           @unique @db.VarChar(64)
+  category         CosmeticCategory
+  name             String           @db.VarChar(120)
+  description      String?          @db.VarChar(255)
+  tier             CosmeticTier     @default(FREE)
+  price            Int              @default(0)
+  grantedByDefault Boolean          @default(false)
+  sortOrder        Int              @default(0)
+  active           Boolean          @default(true)
+  createdAt        DateTime         @default(now())
+  updatedAt        DateTime         @updatedAt
+
+  userCosmetics UserCosmetic[]
+
+  @@index([category, active])
+}
+
+model UserCosmetic {
+  id         String   @id @default(cuid())
+  userId     String
+  cosmeticId String
+  source     String   @default("claim") @db.VarChar(16)
+  equipped   Boolean  @default(false)
+  grantedAt  DateTime @default(now())
+
+  user     User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  cosmetic Cosmetic @relation(fields: [cosmeticId], references: [id], onDelete: Cascade)
+
+  @@unique([userId, cosmeticId])
+  @@index([userId, equipped])
+}
+
+// ---------------------------------------------------------------------------
+// Competitive ranking (Phase 14)
+// ---------------------------------------------------------------------------
+
+model Season {
+  id           String        @id @default(cuid())
+  key          String        @unique
+  name         String
+  startsAt     DateTime      @default(now())
+  endsAt       DateTime?
+  isActive     Boolean       @default(true)
+  createdAt    DateTime      @default(now())
+  gameRatings  GameRating[]
+  ratingEvents RatingEvent[]
+
+  @@index([isActive])
+}
+
+// One rating row per player, per game, per season. The rating itself is
+// written only from the server's match-completion transaction.
+model GameRating {
+  id          String   @id @default(cuid())
+  seasonId    String
+  userId      String
+  gameKey     String   @db.VarChar(64)
+  rating      Int      @default(1000)
+  wins        Int      @default(0)
+  losses      Int      @default(0)
+  draws       Int      @default(0)
+  gamesPlayed Int      @default(0)
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  season Season @relation(fields: [seasonId], references: [id], onDelete: Cascade)
+  user   User   @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@unique([seasonId, userId, gameKey])
+  @@index([seasonId, gameKey, rating])
+}
+
+// One row per (match, player): the unique key is the duplicate-submission
+// guard — a match result can be applied at most once per participant.
+model RatingEvent {
+  id           String   @id @default(cuid())
+  seasonId     String
+  matchId      String
+  userId       String
+  gameKey      String   @db.VarChar(64)
+  result       String   @db.VarChar(8)
+  reason       String   @db.VarChar(32)
+  ratingBefore Int
+  delta        Int
+  ratingAfter  Int
+  createdAt    DateTime @default(now())
+
+  season Season @relation(fields: [seasonId], references: [id], onDelete: Cascade)
+  user   User   @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@unique([matchId, userId])
+  @@index([userId, createdAt])
+}
+
+// ---------------------------------------------------------------------------
+// Phase 13 — In-app purchases (platform store transactions)
+// ---------------------------------------------------------------------------
+
+enum StorePlatform {
+  GOOGLE_PLAY
+  APPLE_APP_STORE
+}
+
+enum PurchaseState {
+  PENDING
+  GRANTED
+  REFUNDED
+  REVOKED
+  EXPIRED
+}
+
+// Verified store transaction. The unique (platform, purchaseToken) pair
+// is the idempotency guard: a store token can only ever be processed
+// once, no matter how many times the client resubmits it.
+model Purchase {
+  id           String        @id @default(cuid())
+  userId       String
+  productKey   String        @db.VarChar(128)
+  platform     StorePlatform
+  purchaseToken String
+  orderId      String?       @db.VarChar(128)
+  state        PurchaseState @default(PENDING)
+  coinAmount   Int           @default(0)
+  passDays     Int           @default(0)
+  // Royal Pass grant snapshots: which expiry this grant produced and
+  // what it was before it, so a refund can roll the pass back exactly.
+  entitlementPreviousExpiresAt DateTime?
+  entitlementExpiresAt         DateTime?
+  verifiedAt    DateTime?
+  grantedAt     DateTime?
+  revokedAt     DateTime?
+  revocationReason String?    @db.VarChar(64)
+  rawVerification   Json?
+  createdAt     DateTime      @default(now())
+  updatedAt     DateTime      @updatedAt
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@unique([platform, purchaseToken])
+  @@index([userId, createdAt])
+  @@index([state, createdAt])
+}
+
+enum DevStoreState {
+  PENDING
+  PURCHASED
+  CANCELED
+}
+
+// Development-only store simulator: rows stand in for transactions
+// Google Play would issue. Endpoints that read or write it are gated
+// off in production (config `iap.devStore` is forced false there).
+model DevStorePurchase {
+  id            String         @id @default(cuid())
+  purchaseToken String         @unique
+  orderId       String         @unique
+  productKey    String         @db.VarChar(128)
+  userId        String
+  state         DevStoreState  @default(PURCHASED)
+  issuedAt      DateTime       @default(now())
+  updatedAt     DateTime       @updatedAt
+
+  @@index([userId, issuedAt])
 }

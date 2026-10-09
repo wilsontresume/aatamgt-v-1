@@ -1,0 +1,95 @@
+[gd_scene load_steps=4 format=3]
+
+[ext_resource type="Script" path="res://src/ui/screens/shop.gd" id="1_shop"]
+[ext_resource type="PackedScene" path="res://scenes/components/top_bar.tscn" id="2_tb"]
+[ext_resource type="PackedScene" path="res://scenes/components/button.tscn" id="3_btn"]
+
+[node name="Shop" type="Control"]
+anchor_right = 1.0
+anchor_bottom = 1.0
+grow_horizontal = 2
+grow_vertical = 2
+script = ExtResource("1_shop")
+
+[node name="Margin" type="MarginContainer" parent="."]
+anchor_right = 1.0
+anchor_bottom = 1.0
+grow_horizontal = 2
+grow_vertical = 2
+theme_override_constants/margin_left = 24
+theme_override_constants/margin_top = 20
+theme_override_constants/margin_right = 24
+theme_override_constants/margin_bottom = 24
+
+[node name="Content" type="VBoxContainer" parent="Margin"]
+theme_override_constants/separation = 12
+
+[node name="TopBar" parent="Margin/Content" instance=ExtResource("2_tb")]
+title = "Shop"
+show_back = true
+show_coins = true
+
+[node name="HintLabel" type="Label" parent="Margin/Content"]
+theme_type_variation = "Caption"
+autowrap_mode = 3
+text = ""
+
+[node name="Scroll" type="ScrollContainer" parent="Margin/Content"]
+layout_mode = 2
+size_flags_vertical = 3
+
+[node name="Column" type="VBoxContainer" parent="Margin/Content/Scroll"]
+layout_mode = 2
+size_flags_horizontal = 3
+theme_override_constants/separation = 10
+
+[node name="CoinsTitle" type="Label" parent="Margin/Content/Scroll/Column"]
+layout_mode = 2
+theme_type_variation = "Heading"
+text = "Coin packs"
+
+[node name="CoinRows" type="VBoxContainer" parent="Margin/Content/Scroll/Column"]
+layout_mode = 2
+theme_override_constants/separation = 8
+
+[node name="PassPanel" type="PanelContainer" parent="Margin/Content/Scroll/Column"]
+layout_mode = 2
+
+[node name="PassBody" type="VBoxContainer" parent="Margin/Content/Scroll/Column/PassPanel"]
+layout_mode = 2
+theme_override_constants/separation = 6
+
+[node name="PassTitle" type="Label" parent="Margin/Content/Scroll/Column/PassPanel/PassBody"]
+layout_mode = 2
+theme_type_variation = "Heading"
+text = "Royal Pass"
+
+[node name="PassSubtitle" type="Label" parent="Margin/Content/Scroll/Column/PassPanel/PassBody"]
+layout_mode = 2
+theme_type_variation = "Caption"
+autowrap_mode = 3
+text = "30 days of ad-free play across every game."
+
+[node name="PassPrice" type="Label" parent="Margin/Content/Scroll/Column/PassPanel/PassBody"]
+layout_mode = 2
+text = "—"
+
+[node name="PassStatus" type="Label" parent="Margin/Content/Scroll/Column/PassPanel/PassBody"]
+layout_mode = 2
+theme_type_variation = "Caption"
+text = ""
+
+[node name="PassButtons" type="HBoxContainer" parent="Margin/Content/Scroll/Column/PassPanel/PassBody"]
+layout_mode = 2
+theme_override_constants/separation = 8
+
+[node name="BuyPassButton" parent="Margin/Content/Scroll/Column/PassPanel/PassBody/PassButtons" instance=ExtResource("3_btn")]
+layout_mode = 2
+custom_minimum_size = Vector2(0, 44)
+text = "Buy Royal Pass"
+
+[node name="RestoreButton" parent="Margin/Content/Scroll/Column/PassPanel/PassBody/PassButtons" instance=ExtResource("3_btn")]
+layout_mode = 2
+custom_minimum_size = Vector2(0, 44)
+variant = 1
+text = "Restore purchases"

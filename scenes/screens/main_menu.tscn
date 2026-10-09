@@ -49,6 +49,10 @@ text = "PLAY"
 variant = 1
 text = "Profile"
 
+[node name="ShopButton" parent="Margin/Content" instance=ExtResource("3_btn")]
+variant = 1
+text = "Shop"
+
 [node name="SettingsButton" parent="Margin/Content" instance=ExtResource("3_btn")]
 variant = 1
 text = "Settings"
@@ -57,9 +61,17 @@ text = "Settings"
 variant = 1
 text = "Friends"
 
+[node name="InventoryButton" parent="Margin/Content" instance=ExtResource("3_btn")]
+variant = 1
+text = "Inventory"
+
 [node name="HistoryButton" parent="Margin/Content" instance=ExtResource("3_btn")]
 variant = 1
 text = "History"
+
+[node name="RankingsButton" parent="Margin/Content" instance=ExtResource("3_btn")]
+variant = 1
+text = "Rankings"
 
 [node name="SpacerBottom" type="Control" parent="Margin/Content"]
 size_flags_vertical = 3

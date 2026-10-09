@@ -26,6 +26,9 @@ import { AdsModule } from './ads/ads.module';
 import { FriendsModule } from './friends/friends.module';
 import { ChallengesModule } from './challenges/challenges.module';
 import { NotificationsModule } from './notifications/notifications.module';
+import { CosmeticsModule } from './cosmetics/cosmetics.module';
+import { RankingsModule } from './rankings/rankings.module';
+import { ShopModule } from './shop/shop.module';
 import { AdminModule } from './admin/admin.module';
 
 @Module({
@@ -63,6 +66,9 @@ import { AdminModule } from './admin/admin.module';
     FriendsModule,
     ChallengesModule,
     NotificationsModule,
+    CosmeticsModule,
+    RankingsModule,
+    ShopModule,
     AdminModule,
   ],
   providers: [

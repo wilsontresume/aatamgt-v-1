@@ -44,6 +44,25 @@ export interface AppConfig {
     friendRequestPerHour: number;
     friendPendingLimit: number;
   };
+  cosmetics: {
+    /** Development-only cosmetic grants. Always false in production. */
+    devGrantsEnabled: boolean;
+  };
+  iap: {
+    /**
+     * Development-only store simulator. Forced off in production —
+     * purchases then require real Google Play Developer API verification.
+     */
+    devStore: boolean;
+    /** Android package name used in Play Developer API verification. */
+    packageName: string;
+    /** Service-account JSON (inline text or file path) for the Play API. */
+    serviceAccount: string;
+    /** Pub/Sub push audience; when set, RTDN pushes must verify as Google. */
+    rtdnAudience: string;
+    /** Fixture prices for the dev store simulator only (never shipped). */
+    devPrices: Record<string, string>;
+  };
   logLevel: string;
 }
 
@@ -51,6 +70,10 @@ export default registerAs<AppConfig>('app', () => {
   const num = (value: string | undefined, fallback: number): number => {
     const parsed = Number(value);
     return Number.isFinite(parsed) ? parsed : fallback;
+  };
+  const bool = (value: string | undefined, fallback: boolean): boolean => {
+    if (value === undefined || value === '') return fallback;
+    return ['1', 'true', 'yes', 'on'].includes(value.toLowerCase());
   };
 
   return {
@@ -96,6 +119,43 @@ export default registerAs<AppConfig>('app', () => {
       challengePendingLimit: num(process.env.CHALLENGE_PENDING_LIMIT, 5),
       friendRequestPerHour: num(process.env.FRIEND_REQUEST_PER_HOUR, 20),
       friendPendingLimit: num(process.env.FRIEND_PENDING_LIMIT, 10),
+    },
+    cosmetics: {
+      // Development-only grants: available outside production unless the
+      // env explicitly disables them, and never in production.
+      devGrantsEnabled:
+        (process.env.NODE_ENV ?? 'development') !== 'production' &&
+        bool(process.env.DEV_COSMETIC_GRANTS, true),
+    },
+    iap: {
+      // Dev store simulator: opt-in outside production, structurally
+      // impossible in production. Prices below are fixtures for the
+      // simulator; the real store (Play Billing / StoreKit) is the only
+      // price source in production builds.
+      devStore:
+        (process.env.NODE_ENV ?? 'development') !== 'production' &&
+        bool(process.env.IAP_DEV_STORE, false),
+      packageName:
+        process.env.GOOGLE_PLAY_PACKAGE_NAME ?? 'com.aatamgt',
+      serviceAccount: process.env.GOOGLE_PLAY_SERVICE_ACCOUNT ?? '',
+      rtdnAudience: process.env.GOOGLE_PUBSUB_AUDIENCE ?? '',
+      devPrices: (() => {
+        const fallback: Record<string, string> = {
+          'com.aatamgt.coins_100': '₹10',
+          'com.aatamgt.coins_1000': '₹90',
+          'com.aatamgt.coins_5500': '₹450',
+          'com.aatamgt.coins_12000': '₹900',
+          'com.aatamgt.coins_65000': '₹4,500',
+          'com.aatamgt.coins_150000': '₹9,000',
+          'com.aatamgt.royal_pass': '₹10',
+        };
+        if (!process.env.IAP_DEV_PRICES) return fallback;
+        try {
+          return { ...fallback, ...JSON.parse(process.env.IAP_DEV_PRICES) };
+        } catch {
+          return fallback;
+        }
+      })(),
     },
     logLevel: process.env.LOG_LEVEL ?? 'info',
   };

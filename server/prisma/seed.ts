@@ -1,5 +1,6 @@
 import { PrismaClient, Role } from '@prisma/client';
 import * as bcrypt from 'bcryptjs';
+import { CATALOG } from '../src/cosmetics/catalog';
 
 /**
  * Development-only seed. Refuses to run in production.
@@ -47,6 +48,23 @@ export async function seed(prisma: PrismaClient): Promise<void> {
       where: { key: game.key },
       update: { name: game.name, description: game.description },
       create: game,
+    });
+  }
+
+  for (const cosmetic of CATALOG) {
+    await prisma.cosmetic.upsert({
+      where: { key: cosmetic.key },
+      update: {
+        category: cosmetic.category,
+        name: cosmetic.name,
+        description: cosmetic.description,
+        tier: cosmetic.tier,
+        price: cosmetic.price,
+        grantedByDefault: cosmetic.grantedByDefault,
+        sortOrder: cosmetic.sortOrder,
+        active: true,
+      },
+      create: cosmetic,
     });
   }
 

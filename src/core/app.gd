@@ -31,6 +31,15 @@ var ads: AdService
 ## Phase 11: friends, challenges, match history (REST-only social layer).
 var social: SocialService
 
+## Phase 12: server-owned cosmetic inventory.
+var cosmetics: CosmeticService
+
+## Phase 14: competitive ranking (per-game ratings, seasons, leaderboard).
+var rankings: RankingService
+
+## Phase 13: platform in-app purchases (store-verified, server-granted).
+var shop: ShopService
+
 var _bootstrapped := false
 
 
@@ -46,6 +55,9 @@ func _init() -> void:
 	online = OnlineMatchService.new(api_client, auth)
 	ads = AdService.new(auth)
 	social = SocialService.new(auth)
+	cosmetics = CosmeticService.new(auth, coins)
+	rankings = RankingService.new(auth, api_client)
+	shop = ShopService.new(api_client, auth, coins)
 
 
 func _ready() -> void:
@@ -127,12 +139,14 @@ func _on_session_changed(session_user: Dictionary) -> void:
 	user.apply_session_user(session_user)
 	refresh_wallet()  # fire-and-forget: login screens don't block on it
 	ads.refresh_config()  # fire-and-forget: server-driven ad config
+	cosmetics.refresh()  # fire-and-forget: inventory for the new session
 
 
 func _on_signed_out() -> void:
 	user.apply_signed_out()
 	coins.set_balance_from_server(0)  # never leak the previous account's balance
 	ads.clear_config()
+	cosmetics.clear()  # never leak the previous account's inventory
 
 
 ## Phase 8: a server-VALIDATED rewarded ad moved coins — re-read the

@@ -130,6 +130,30 @@ export class EnvironmentVariables {
   @IsInt()
   @Min(1)
   FRIEND_PENDING_LIMIT: number;
+
+  @IsOptional()
+  @IsString()
+  DEV_COSMETIC_GRANTS?: string;
+
+  @IsOptional()
+  @IsString()
+  IAP_DEV_STORE?: string;
+
+  @IsOptional()
+  @IsString()
+  IAP_DEV_PRICES?: string;
+
+  @IsOptional()
+  @IsString()
+  GOOGLE_PLAY_PACKAGE_NAME?: string;
+
+  @IsOptional()
+  @IsString()
+  GOOGLE_PLAY_SERVICE_ACCOUNT?: string;
+
+  @IsOptional()
+  @IsString()
+  GOOGLE_PUBSUB_AUDIENCE?: string;
 }
 
 const defaults: Record<string, unknown> = {

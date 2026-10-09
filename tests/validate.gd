@@ -16,6 +16,9 @@ const SCREEN_ROOT_NAMES := {
 	&"friends": "Friends",
 	&"challenge": "Challenge",
 	&"history": "History",
+	&"inventory": "Inventory",
+	&"leaderboard": "Leaderboard",
+	&"shop": "Shop",
 }
 
 var _checks := 0
@@ -93,7 +96,8 @@ func _run() -> void:
 	# --- Every screen instantiates with correct root -------------------
 	for screen_id in [&"game_selection", &"profile", &"settings", &"auth",
 			&"aadu_puli", &"solah_seedi", &"nine_mens_morris",
-			&"friends", &"challenge", &"history", &"main_menu"]:
+			&"friends", &"challenge", &"history", &"inventory", &"leaderboard",
+			&"shop", &"main_menu"]:
 		_app.navigation.go(screen_id)
 		await _frame()
 		await _frame()
@@ -258,6 +262,15 @@ func _run() -> void:
 	# --- Phase 11: social (friends / challenges / history) -----------
 	await _test_phase11_social()
 
+	# --- Phase 12: cosmetic inventory (server-owned contract) --------
+	await _test_phase12_cosmetics()
+
+	# --- Phase 14: competitive ranking (server-owned contract) -------
+	await _test_phase14_ranking()
+
+	# --- Phase 13: in-app purchases (store-verified contract) --------
+	await _test_phase13_iap()
+
 	_finish()
 
 
@@ -288,6 +301,287 @@ func _test_phase11_social() -> void:
 			"challenge share text matches the WhatsApp example")
 	_check(msg.contains("\n\nCode: K7M2QX9B"),
 			"challenge share text carries the entry code")
+
+
+## Phase 12 cosmetic inventory contract: the client renders the
+## server-owned catalog (owned/equipped/locked, free/premium) and has
+## no local inventory writer. Palettes and labels are pure functions
+## of equipped keys; the FX layer no-ops for the "none" cosmetics.
+func _test_phase12_cosmetics() -> void:
+	_check(_app.navigation.has_screen(&"inventory"),
+			"navigation knows the inventory screen")
+	_check(_app.cosmetics is CosmeticService, "App exposes the CosmeticService")
+
+	var methods := []
+	for m in _app.cosmetics.get_method_list():
+		methods.append(str(m.get("name", "")))
+	for required in ["refresh", "claim", "purchase", "equip", "dev_grant",
+			"clear", "equipped_key", "items_in_category", "apply_board_skin"]:
+		_check(methods.has(required), "CosmeticService exposes %s" % required)
+	for forbidden in ["add_item", "remove_item", "set_owned", "set_equipped",
+			"grant_local", "spend_local", "set_loaded"]:
+		_check(not methods.has(forbidden),
+				"no local inventory writer '%s'" % forbidden)
+
+	# Server states drive the three labels.
+	_check(CosmeticService.state_of({"owned": true, "equipped": true})
+			== "equipped", "equipped beats owned for the state label")
+	_check(CosmeticService.state_of({"owned": true, "equipped": false})
+			== "owned", "owned label for unowned-equipped items")
+	_check(CosmeticService.state_of({"owned": false, "equipped": false})
+			== "locked", "locked label for unowned items")
+	_check(CosmeticService.tier_label({"tier": "FREE", "price": 0}) == "Free",
+			"free tier label")
+	_check(CosmeticService.tier_label({"tier": "PREMIUM", "price": 250})
+			== "250 coins", "premium tier label carries the price")
+	_check(CosmeticService.is_premium({"tier": "PREMIUM"}),
+			"is_premium detects premium tiers")
+	_check(not CosmeticService.is_premium({"tier": "FREE"}),
+			"is_premium rejects free tiers")
+
+	# Presentation palettes: defaults are empty (classic), variants exist.
+	_check(CosmeticService.board_palette("board_classic").is_empty(),
+			"classic board needs no palette override")
+	_check(CosmeticService.board_palette("").is_empty(),
+			"unknown board key falls back to classic")
+	_check(CosmeticService.board_palette("board_midnight").has("bg"),
+			"midnight board palette exists")
+	_check(CosmeticService.pfp_style("pfp_default").is_empty(),
+			"default profile picture needs no style")
+	_check(CosmeticService.frame_style("frame_none").is_empty(),
+			"no-frame needs no style")
+	_check(CosmeticService.victory_style("victory_none").is_empty(),
+			"none victory effect is empty")
+	_check(CosmeticService.capture_style("capture_none").is_empty(),
+			"none capture effect is empty")
+	_check(CosmeticService.victory_style("victory_confetti").has("kind"),
+			"confetti victory style exists")
+	_check(CosmeticService.capture_style("capture_shockwave").has("kind"),
+			"shockwave capture style exists")
+
+	# Offline: nothing is equipped and dev grants start disabled.
+	_check(_app.cosmetics.equipped_key("BOARD_SKIN") == "",
+			"offline inventory reports no equipped board")
+	_check(not _app.cosmetics.dev_grants_enabled,
+			"dev grants are off before the first fetch")
+
+	# FX: empty styles are no-ops; real styles spawn self-cleaning overlays.
+	var scratch := Control.new()
+	get_root().add_child(scratch)
+	CosmeticFx.victory(scratch, {})
+	CosmeticFx.capture(scratch, {})
+	_check(scratch.get_child_count() == 0, "empty styles are FX no-ops")
+	CosmeticFx.capture(scratch, CosmeticService.capture_style("capture_flash"))
+	_check(scratch.get_child_count() == 1,
+			"capture style spawns a burst overlay")
+	await create_timer(1.0).timeout  # burst tween runs 0.55s
+	_check(scratch.get_child_count() == 0,
+			"burst overlay cleans itself up")
+	CosmeticFx.victory(scratch, CosmeticService.victory_style("victory_confetti"))
+	_check(scratch.get_child_count() == 1, "victory style spawns an overlay")
+	var has_particles := false
+	for overlay in scratch.get_children():
+		for child in overlay.get_children():
+			if child is CPUParticles2D:
+				has_particles = true
+	_check(has_particles, "victory overlay carries particles")
+	# scratch stays alive: its victory overlay frees itself after 3s.
+
+	# Boards accept the equipped palette and default to classic.
+	var board := AaduPuliBoard.new()
+	_check(board.has_method("set_skin"), "boards expose set_skin")
+	_check(board.skin.is_empty(), "boards start on the classic palette")
+	board.set_skin(CosmeticService.board_palette("board_woodland"))
+	_check(board.skin.get("bg", Color(0, 0, 0)) == Color("1d2a1e"),
+			"set_skin stores the woodland palette")
+	board.set_skin({})
+	_check(board.skin.is_empty(), "set_skin({}) restores the classic palette")
+	board.free()
+
+
+## Phase 14 offline contract: ratings are server-owned — the client
+## fetches summary/board/history and only mirrors the rank band table
+## for labels. No local rating writer may exist, and the six tiers run
+## Bronze -> Master with strictly increasing thresholds.
+func _test_phase14_ranking() -> void:
+	_check(_app.navigation.has_screen(&"leaderboard"),
+			"navigation knows the leaderboard screen")
+	_check(_app.rankings is RankingService, "App exposes the RankingService")
+
+	var methods := []
+	for m in _app.rankings.get_method_list():
+		methods.append(str(m.get("name", "")))
+	for required in ["summary", "leaderboard", "history", "rank_of", "rank_title"]:
+		_check(methods.has(required), "RankingService exposes %s" % required)
+	for forbidden in ["set_rating", "apply_result", "record_win", "adjust",
+			"submit_result", "set_rank"]:
+		_check(not methods.has(forbidden),
+				"no local rating writer '%s'" % forbidden)
+
+	# Three rated games with stable competitive titles.
+	_check(RankingService.RATED_GAME_KEYS.size() == 3, "three rated games")
+	_check(RankingService.GAME_TITLES.get("solah-seedi", "") == "16 Soldiers",
+			"Solah Seedi is displayed as 16 Soldiers")
+
+	# Six tiers, Bronze -> Master, strictly increasing thresholds.
+	_check(RankingService.RANK_TIERS.size() == 6, "six rank tiers")
+	var keys := []
+	var previous := -1
+	for tier in RankingService.RANK_TIERS:
+		keys.append(str(tier["key"]))
+		var minimum := int(tier["min"])
+		_check(minimum > previous,
+				"tier '%s' threshold strictly increases" % str(tier["key"]))
+		previous = minimum
+	_check(keys == ["bronze", "silver", "gold", "platinum", "diamond", "master"],
+			"rank order bronze -> master")
+	_check(RankingService.rank_title(1000) == "Bronze", "start rating is Bronze")
+	_check(RankingService.rank_title(1099) == "Bronze", "bronze band ends at 1099")
+	_check(RankingService.rank_title(1100) == "Silver", "silver band starts at 1100")
+	_check(RankingService.rank_title(1300) == "Gold", "gold band")
+	_check(RankingService.rank_title(1500) == "Platinum", "platinum band")
+	_check(RankingService.rank_title(1700) == "Diamond", "diamond band")
+	_check(RankingService.rank_title(1900) == "Master", "master band")
+
+	# Main menu entry + profile rank display section.
+	var menu_scene: PackedScene = load("res://scenes/screens/main_menu.tscn")
+	var menu: Control = menu_scene.instantiate()
+	_check(menu.get_node_or_null("Margin/Content/RankingsButton") != null,
+			"main menu offers a Rankings button")
+	menu.free()
+	var profile_scene: PackedScene = load("res://scenes/screens/profile.tscn")
+	var profile: Control = profile_scene.instantiate()
+	_check(profile.get_node_or_null("Margin/Content/RankRows") != null,
+			"profile exposes the rank rows section")
+	profile.free()
+
+	# Signed out: reads fail soft with the session error, never a write.
+	var summary: Dictionary = await _app.rankings.summary()
+	_check(not summary.ok, "signed-out summary reports failure")
+	_check(int(summary.get("error_kind", -1)) == ApiClient.ErrorKind.EXPIRED_SESSION,
+			"signed-out summary fails with expired session")
+	var history: Dictionary = await _app.rankings.history()
+	_check(not history.ok, "signed-out history reports failure")
+
+
+## Phase 13 offline contract: purchases are store-verified and
+## server-granted. The client exposes only the seven platform
+## product IDs (never prices), routes through a billing-provider
+## abstraction, and has no local grant/balance writer of its own.
+func _test_phase13_iap() -> void:
+	_check(_app.navigation.has_screen(&"shop"),
+			"navigation knows the shop screen")
+	_check(_app.shop is ShopService, "App exposes the ShopService")
+
+	var methods := []
+	for m in _app.shop.get_method_list():
+		methods.append(str(m.get("name", "")))
+	for required in ["refresh", "products", "price_text", "buy", "restore",
+			"entitlement", "history"]:
+		_check(methods.has(required), "ShopService exposes %s" % required)
+	for forbidden in ["grant", "credit", "debit", "set_balance", "add_coins",
+			"spend_coins", "complete_purchase", "confirm_purchase",
+			"set_entitlement", "activate_pass"]:
+		_check(not methods.has(forbidden),
+				"no local purchase/grant writer '%s'" % forbidden)
+
+	# Exactly seven platform product IDs; six coin packs in ascending
+	# order plus the Royal Pass. IDs are the store contract — prices
+	# are never hard-coded here.
+	var keys: Array = ShopService.PRODUCT_KEYS
+	_check(keys.size() == 7, "seven platform product IDs")
+	_check(keys[0] == "com.aatamgt.coins_100", "smallest pack is coins_100")
+	_check(keys[1] == "com.aatamgt.coins_1000", "coins_1000 pack")
+	_check(keys[2] == "com.aatamgt.coins_5500", "coins_5500 pack")
+	_check(keys[3] == "com.aatamgt.coins_12000", "coins_12000 pack")
+	_check(keys[4] == "com.aatamgt.coins_65000", "coins_65000 pack")
+	_check(keys[5] == "com.aatamgt.coins_150000", "largest pack is coins_150000")
+	_check(keys[6] == ShopService.ROYAL_PASS_KEY,
+			"seventh ID is the Royal Pass")
+	_check(ShopService.ROYAL_PASS_KEY == "com.aatamgt.royal_pass",
+			"Royal Pass platform ID")
+	for key in keys:
+		_check(str(key).begins_with("com.aatamgt."),
+				"product ID '%s' under the app package" % str(key))
+
+	# No price literals in the shop service or screen: prices come
+	# from the billing provider / server only. ($ only counts when a
+	# digit follows — GDScript node paths start with a bare $.)
+	var dollar_price := RegEx.new()
+	dollar_price.compile("\\$[0-9]")
+	for path in ["res://src/core/services/shop_service.gd",
+			"res://src/ui/screens/shop.gd"]:
+		var text := FileAccess.get_file_as_string(path)
+		_check(not text.contains("Rs "), "%s has no 'Rs ' price" % path)
+		_check(not text.contains("\u20b9"), "%s has no rupee price" % path)
+		_check(dollar_price.search(text) == null,
+				"%s has no dollar price" % path)
+		_check(not text.contains("\u20ac"), "%s has no euro price" % path)
+
+	# Billing provider abstraction: both providers honor the same
+	# three-verb contract, and the Google provider reports itself
+	# unavailable when the platform plugin is absent.
+	var dev_provider: BillingProvider = DevStoreBilling.new(
+			_app.api_client, _app.auth)
+	_check(dev_provider is BillingProvider, "dev store is a BillingProvider")
+	_check(dev_provider.is_available(), "dev store provider is available")
+	var play_provider: BillingProvider = GooglePlayBilling.new()
+	_check(play_provider is BillingProvider, "Play store is a BillingProvider")
+	_check(not play_provider.is_available(),
+			"Play provider is unavailable without the platform plugin")
+
+	# Main menu offers the Shop; the screen wires its real controls.
+	var menu_scene: PackedScene = load("res://scenes/screens/main_menu.tscn")
+	var menu: Control = menu_scene.instantiate()
+	_check(menu.get_node_or_null("Margin/Content/ShopButton") != null,
+			"main menu offers a Shop button")
+	menu.free()
+	var shop_scene: PackedScene = load("res://scenes/screens/shop.tscn")
+	var shop: Control = shop_scene.instantiate()
+	_check(shop.get_node_or_null("Margin/Content/TopBar") != null,
+			"shop has a TopBar")
+	_check(shop.get_node_or_null("Margin/Content/Scroll/Column/CoinRows") != null,
+			"shop has the coin rows container")
+	_check(shop.get_node_or_null("Margin/Content/Scroll/Column/PassPanel/PassBody/PassButtons/BuyPassButton") != null,
+			"shop has the Royal Pass buy button")
+	_check(shop.get_node_or_null("Margin/Content/Scroll/Column/PassPanel/PassBody/PassButtons/RestoreButton") != null,
+			"shop has the restore purchases button")
+	_app.add_child(shop)
+	for i in 6:
+		await _frame()
+	var hint := shop.get_node("Margin/Content/HintLabel") as Label
+	var status := shop.get_node(
+			"Margin/Content/Scroll/Column/PassPanel/PassBody/PassStatus") as Label
+	var rows := shop.get_node(
+			"Margin/Content/Scroll/Column/CoinRows") as VBoxContainer
+	_check(hint.text.contains("offline"),
+			"offline shop reports the offline hint")
+	_check(status.text.contains("Sign in"),
+			"signed-out Royal Pass status asks for sign-in")
+	_check(rows.get_child_count() == 0,
+			"offline shop renders no fake product rows")
+	var buy_pass := shop.get_node(
+			"Margin/Content/Scroll/Column/PassPanel/PassBody/PassButtons/BuyPassButton") as Button
+	var restore := shop.get_node(
+			"Margin/Content/Scroll/Column/PassPanel/PassBody/PassButtons/RestoreButton") as Button
+	_check(buy_pass.disabled, "buy disabled while the store is offline")
+	_check(restore.disabled, "restore disabled while the store is offline")
+	shop.free()
+
+	# Signed out: every server call fails soft with the session error
+	# and nothing is written locally.
+	var refresh: Dictionary = await _app.shop.refresh()
+	_check(not refresh.ok, "signed-out catalog refresh reports failure")
+	var buy: Dictionary = await _app.shop.buy(ShopService.PRODUCT_KEYS[0])
+	_check(not buy.ok, "signed-out buy reports failure")
+	_check(str(buy.get("error", "")).contains("Sign in"),
+			"signed-out buy asks for sign-in")
+	var ent: Dictionary = await _app.shop.entitlement()
+	_check(not ent.ok, "signed-out entitlement reports failure")
+	_check(int(ent.get("error_kind", -1)) == ApiClient.ErrorKind.EXPIRED_SESSION,
+			"signed-out entitlement fails with expired session")
+	var hist: Dictionary = await _app.shop.history()
+	_check(not hist.ok, "signed-out purchase history reports failure")
 
 
 ## Phase 7 offline contract: the client can only OBSERVE the coin

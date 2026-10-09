@@ -86,15 +86,17 @@ function makeMatches(
       match: { turnTimeoutMs: 60_000, disconnectGraceMs: 30_000 },
     }),
   };
+  const rankings = { applyMatchResult: jest.fn().mockResolvedValue([]) };
   prisma.$queryRaw = jest.fn().mockResolvedValue([]);
   const service = new MatchesService(
     prisma as never,
     games as never,
     events as never,
     clock as never,
+    rankings as never,
     config as never,
   );
-  return { service, prisma, games, events, clock, config };
+  return { service, prisma, games, events, clock, rankings, config };
 }
 
 describe('MatchesService', () => {

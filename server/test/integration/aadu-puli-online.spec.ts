@@ -387,6 +387,11 @@ describe('Aadu Puli online (integration, two simulated clients)', () => {
   });
 
   it('plays to a server-decided completion with full move history', async () => {
+    // Earlier tests close their clients over still-ACTIVE matches; the
+    // 600ms disconnect grace then forfeits them asynchronously. Let
+    // every pending forfeit land before the baseline so the profile
+    // delta counts only this match.
+    await sleep(800);
     const aliceProfileBefore = await prisma().profile.findUnique({
       where: { userId: alice.id },
     });

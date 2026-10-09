@@ -81,6 +81,13 @@ size_flags_horizontal = 3
 title_text = "Win rate"
 value_text = "—"
 
+[node name="RankTitle" type="Label" parent="Margin/Content"]
+theme_type_variation = "Heading"
+text = "Competitive"
+
+[node name="RankRows" type="VBoxContainer" parent="Margin/Content"]
+theme_override_constants/separation = 6
+
 [node name="HintLabel" type="Label" parent="Margin/Content"]
 theme_type_variation = "Caption"
 autowrap_mode = 3

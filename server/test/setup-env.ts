@@ -27,6 +27,9 @@ process.env.THROTTLE_LIMIT = '1000';
 process.env.AUTH_THROTTLE_TTL = '60';
 process.env.AUTH_THROTTLE_LIMIT = '20';
 process.env.CORS_ORIGINS = 'http://localhost:3000';
+// Phase 13: integration specs exercise the purchase pipeline through the
+// development store simulator (production forces this off).
+process.env.IAP_DEV_STORE = process.env.IAP_DEV_STORE ?? 'true';
 
 const testDatabaseUrl = process.env.TEST_DATABASE_URL;
 if (!testDatabaseUrl) {

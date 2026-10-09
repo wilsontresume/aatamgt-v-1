@@ -78,6 +78,8 @@ var _ai_game_seed := 0
 var _online_mode := false
 var _submitting := false
 var _announced_match_id := ""
+## Phase 12: capture-count baseline for the equipped capture effect.
+var _fx_seen_captures := -1
 
 ## Phase 8: match whose result dialog is on screen — checked for an
 ## interstitial once the player dismisses it (never mid-game).
@@ -113,6 +115,7 @@ func _ready() -> void:
 	App.online.match_completed.connect(_on_online_completed)
 	if App.online.consume_auto_online():
 		_set_online_mode()
+	App.cosmetics.apply_board_skin(_board)
 	_refresh()
 
 
@@ -541,6 +544,7 @@ func _maybe_announce_completion() -> void:
 	var reason := str(App.online.completion.get("reason", ""))
 	match mine:
 		"WIN":
+			_play_victory_fx()
 			_announce_online_result("You win!", _completion_text(reason, true))
 		"LOSS":
 			_announce_online_result("You lose", _completion_text(reason, false))
@@ -656,6 +660,7 @@ func _current_phase() -> String:
 # --- Presentation -------------------------------------------------------
 
 func _refresh() -> void:
+	_refresh_capture_fx()
 	_maybe_start_ai()
 	var thinking := _is_thinking()
 	_status_label.text = _status_text()
@@ -886,7 +891,43 @@ func _online_hint_text() -> String:
 	return "Online · you play the %s pieces" % App.online.side
 
 
+# --- Cosmetic effects (Phase 12) -------------------------------------------
+
+func _refresh_capture_fx() -> void:
+	var captures := (NineMensMorrisGameState.PIECES_PER_SIDE * 2
+			- _state.count_pieces(NineMensMorrisGameState.Cell.RED)
+			- _state.count_pieces(NineMensMorrisGameState.Cell.GREEN)
+			- _state.hands[0] - _state.hands[1])
+	if _fx_seen_captures >= 0 and captures > _fx_seen_captures:
+		CosmeticFx.capture(_board, CosmeticService.capture_style(
+				App.cosmetics.equipped_key("CAPTURE_ANIMATION")))
+	_fx_seen_captures = captures
+
+
+func _play_victory_fx() -> void:
+	CosmeticFx.victory(self, CosmeticService.victory_style(
+			App.cosmetics.equipped_key("VICTORY_ANIMATION")))
+
+
+## The local result dialog celebrates only the human side's win;
+## online wins celebrate once through _maybe_announce_completion.
+func _play_victory_fx_if_won() -> void:
+	if _online_mode:
+		return
+	var won := false
+	match _state.result:
+		NineMensMorrisGameState.Result.RED_WIN:
+			won = true
+		NineMensMorrisGameState.Result.GREEN_WIN:
+			won = not _ai_mode
+		_:
+			won = false
+	if won:
+		_play_victory_fx()
+
+
 func _announce_result() -> void:
+	_play_victory_fx_if_won()
 	match _state.result:
 		NineMensMorrisGameState.Result.RED_WIN:
 			App.dialog.show_error("Red win", "Red: %s."
