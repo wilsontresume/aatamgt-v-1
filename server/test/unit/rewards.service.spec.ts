@@ -9,7 +9,9 @@ const coinsConfig = {
     rewardedAdStandard: 100,
   },
 };
-const config = { get: jest.fn().mockReturnValue(coinsConfig) };
+const systemConfig = {
+  number: jest.fn().mockResolvedValue(coinsConfig.coins.dailyLoginBonus),
+};
 
 function makeRewards(opts: {
   claimedToday?: unknown;
@@ -45,7 +47,7 @@ function makeRewards(opts: {
     prisma as never,
     wallet as never,
     notifications as never,
-    config as never,
+    systemConfig as never,
   );
   return { service, wallet, notifications, daily };
 }

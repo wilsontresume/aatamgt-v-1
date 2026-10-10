@@ -434,6 +434,14 @@ model AdminAuditLog {
   @@index([action, createdAt])
 }
 
+/// Runtime platform configuration (Phase 15). Admin-editable overrides;
+/// unset keys fall back to the environment defaults in configuration.ts.
+model SystemConfig {
+  key       String   @id @db.VarChar(64)
+  value     Json
+  updatedAt DateTime @updatedAt
+}
+
 // ---------------------------------------------------------------------------
 // Cosmetics (Phase 12) — server-owned inventory, no real-money purchases.
 // ---------------------------------------------------------------------------

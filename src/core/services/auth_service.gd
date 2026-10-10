@@ -17,7 +17,8 @@ const SESSION_PATH := "user://session.json"
 
 ## Keys persisted per user (explicit allow-list — never dump the raw
 ## server payload, which may contain more than we want on disk).
-const USER_FIELDS := ["id", "username", "is_guest", "display_name"]
+## `role` (USER/MODERATOR/ADMIN) gates the Phase 15 admin dashboard.
+const USER_FIELDS := ["id", "username", "is_guest", "display_name", "role"]
 
 var _api: ApiClient
 var _session: Dictionary = {}
@@ -59,6 +60,16 @@ func get_player_id() -> String:
 
 func is_guest() -> bool:
 	return bool(get_user().get("is_guest", false))
+
+
+## Server-assigned role: "USER" | "MODERATOR" | "ADMIN".
+func role() -> String:
+	return str(get_user().get("role", "USER"))
+
+
+## True for MODERATOR and ADMIN — gates the Phase 15 admin dashboard.
+func is_staff() -> bool:
+	return role() in ["MODERATOR", "ADMIN"]
 
 
 func get_access_token() -> String:
@@ -265,6 +276,40 @@ func authenticated_delete(path: String) -> Dictionary:
 		if await _refresh_tokens():
 			res = await _api.request_json(HTTPClient.METHOD_DELETE, path, {},
 					get_access_token())
+		elif last_error in [ApiClient.ErrorKind.NETWORK, ApiClient.ErrorKind.SERVER_UNAVAILABLE]:
+			return _fail(last_error, last_message, 0)
+		if res.status == 401:
+			_expire()
+			return _fail(ApiClient.ErrorKind.EXPIRED_SESSION,
+					ApiClient.error_text(ApiClient.ErrorKind.EXPIRED_SESSION), 401)
+	last_error = res.error_kind
+	last_message = str(res.get("message", ""))
+	return res
+
+
+## Authenticated PATCH with the one-shot refresh contract (Phase 15:
+## admin status changes, cosmetic updates).
+func authenticated_patch(path: String, payload: Dictionary) -> Dictionary:
+	return await _authenticated_write(HTTPClient.METHOD_PATCH, path, payload)
+
+
+## Authenticated PUT with the one-shot refresh contract (Phase 15:
+## batched system config saves).
+func authenticated_put(path: String, payload: Dictionary) -> Dictionary:
+	return await _authenticated_write(HTTPClient.METHOD_PUT, path, payload)
+
+
+func _authenticated_write(method: HTTPClient.Method, path: String,
+		payload: Dictionary) -> Dictionary:
+	if not is_authenticated():
+		return _fail(ApiClient.ErrorKind.EXPIRED_SESSION,
+				ApiClient.error_text(ApiClient.ErrorKind.EXPIRED_SESSION), 401)
+
+	var res: Dictionary = await _api.request_json(method, path, payload,
+			get_access_token())
+	if res.status == 401:
+		if await _refresh_tokens():
+			res = await _api.request_json(method, path, payload, get_access_token())
 		elif last_error in [ApiClient.ErrorKind.NETWORK, ApiClient.ErrorKind.SERVER_UNAVAILABLE]:
 			return _fail(last_error, last_message, 0)
 		if res.status == 401:

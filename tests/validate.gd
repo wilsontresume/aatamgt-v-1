@@ -19,6 +19,7 @@ const SCREEN_ROOT_NAMES := {
 	&"inventory": "Inventory",
 	&"leaderboard": "Leaderboard",
 	&"shop": "Shop",
+	&"admin": "Admin",
 }
 
 var _checks := 0
@@ -97,7 +98,7 @@ func _run() -> void:
 	for screen_id in [&"game_selection", &"profile", &"settings", &"auth",
 			&"aadu_puli", &"solah_seedi", &"nine_mens_morris",
 			&"friends", &"challenge", &"history", &"inventory", &"leaderboard",
-			&"shop", &"main_menu"]:
+			&"shop", &"admin", &"main_menu"]:
 		_app.navigation.go(screen_id)
 		await _frame()
 		await _frame()
@@ -270,6 +271,9 @@ func _run() -> void:
 
 	# --- Phase 13: in-app purchases (store-verified contract) --------
 	await _test_phase13_iap()
+
+	# --- Phase 15: admin dashboard (role-guarded contract) -----------
+	await _test_phase15_admin()
 
 	_finish()
 
@@ -582,6 +586,92 @@ func _test_phase13_iap() -> void:
 			"signed-out entitlement fails with expired session")
 	var hist: Dictionary = await _app.shop.history()
 	_check(not hist.ok, "signed-out purchase history reports failure")
+
+
+## Phase 15 offline contract: the dashboard is a thin, role-gated view
+## over the existing admin REST surface. AdminService must expose every
+## read/mutation endpoint, own no local platform-state writer, and the
+## screen must ship with all six tabs while staying hidden for
+## non-staff sessions. Signed-out calls fail soft with the session
+## error and never touch the network.
+func _test_phase15_admin() -> void:
+	_check(_app.navigation.has_screen(&"admin"),
+			"navigation knows the admin screen")
+	_check(_app.admin is AdminService, "App exposes the AdminService")
+
+	var methods := []
+	for m in _app.admin.get_method_list():
+		methods.append(str(m.get("name", "")))
+	for required in ["stats", "players", "player", "player_wallet",
+			"player_matches", "set_status", "matches", "finalize_match",
+			"economy_summary", "transactions", "ad_shows", "purchases",
+			"cosmetics", "update_cosmetic", "config_entries", "save_config",
+			"audit_log"]:
+		_check(methods.has(required), "AdminService exposes %s" % required)
+	for forbidden in ["credit", "debit", "set_balance", "add_coins", "grant",
+			"set_rating", "apply_result", "complete_purchase", "ban_user",
+			"mutate_config"]:
+		_check(not methods.has(forbidden),
+				"no local platform-state writer '%s'" % forbidden)
+
+	# The role travels with the public user and gates the entry point.
+	_check(AuthService.USER_FIELDS.has("role"),
+			"role is persisted with the public user")
+	_check(_app.auth.has_method("role") and _app.auth.has_method("is_staff"),
+			"AuthService exposes role() and is_staff()")
+	_check(not _app.auth.is_staff(), "signed-out sessions are not staff")
+
+	# Main menu ships the entry point, hidden until a staff session.
+	var menu_scene: PackedScene = load("res://scenes/screens/main_menu.tscn")
+	var menu: Control = menu_scene.instantiate()
+	var admin_button: Button = menu.get_node_or_null(
+			"Margin/Content/AdminButton")
+	_check(admin_button != null, "main menu offers an Admin button")
+	_check(admin_button != null and not admin_button.visible,
+			"Admin button stays hidden by default")
+	menu.free()
+
+	# Screen structure: six tabs, search, filters, list and detail areas.
+	var admin_scene: PackedScene = load("res://scenes/screens/admin.tscn")
+	_check(admin_scene != null, "admin.tscn loads")
+	var screen: Control = admin_scene.instantiate()
+	_check(screen.name == "Admin", "admin screen root is named Admin")
+	var required_nodes := [
+		"Margin/Content/TopBar",
+		"Margin/Content/HintLabel",
+		"Margin/Content/AdminTabs",
+		"Margin/Content/SearchRow/SearchEdit",
+		"Margin/Content/SearchRow/SearchButton",
+		"Margin/Content/FilterRow",
+		"Margin/Content/Scroll/Column/ListRows",
+		"Margin/Content/Scroll/Column/DetailRows",
+	]
+	for path in required_nodes:
+		_check(screen.get_node_or_null(path) != null,
+				"admin screen hosts %s" % path)
+	var tabs: Control = screen.get_node("Margin/Content/AdminTabs")
+	_check(tabs.get_child_count() == 6, "admin screen has six tabs")
+	var tab_names := []
+	for child in tabs.get_children():
+		tab_names.append(str(child.name))
+	_check(tab_names == ["PlayersTab", "GamesTab", "EconomyTab",
+			"ContentTab", "ConfigTab", "AuditTab"],
+			"tab order: players, games, economy, content, config, audit")
+	screen.free()
+
+	# Signed out: every server call fails soft with the session error.
+	var stats: Dictionary = await _app.admin.stats()
+	_check(not stats.ok, "signed-out admin stats reports failure")
+	_check(int(stats.get("error_kind", -1)) == ApiClient.ErrorKind.EXPIRED_SESSION,
+			"signed-out admin stats fails with expired session")
+	var players: Dictionary = await _app.admin.players()
+	_check(not players.ok, "signed-out player search reports failure")
+	var summary: Dictionary = await _app.admin.economy_summary()
+	_check(not summary.ok, "signed-out economy summary reports failure")
+	var config: Dictionary = await _app.admin.config_entries()
+	_check(not config.ok, "signed-out config read reports failure")
+	var audit: Dictionary = await _app.admin.audit_log()
+	_check(not audit.ok, "signed-out audit read reports failure")
 
 
 ## Phase 7 offline contract: the client can only OBSERVE the coin

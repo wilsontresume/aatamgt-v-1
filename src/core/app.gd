@@ -40,6 +40,9 @@ var rankings: RankingService
 ## Phase 13: platform in-app purchases (store-verified, server-granted).
 var shop: ShopService
 
+## Phase 15: staff dashboard API (role-guarded admin endpoints).
+var admin: AdminService
+
 var _bootstrapped := false
 
 
@@ -58,6 +61,7 @@ func _init() -> void:
 	cosmetics = CosmeticService.new(auth, coins)
 	rankings = RankingService.new(auth, api_client)
 	shop = ShopService.new(api_client, auth, coins)
+	admin = AdminService.new(auth)
 
 
 func _ready() -> void:

@@ -23,6 +23,7 @@ const SCREEN_PATHS := {
 	&"inventory": "res://scenes/screens/inventory.tscn",
 	&"leaderboard": "res://scenes/screens/leaderboard.tscn",
 	&"shop": "res://scenes/screens/shop.tscn",
+	&"admin": "res://scenes/screens/admin.tscn",
 }
 
 ## Reaching this screen resets the back stack (it is the hub).

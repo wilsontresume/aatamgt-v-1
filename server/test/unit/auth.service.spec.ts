@@ -78,7 +78,13 @@ function makeAuth(
       replayed: false,
     }),
   };
-  const service = new AuthService(prisma as never, jwt as never, config as never, wallet as never);
+  const service = new AuthService(
+    prisma as never,
+    jwt as never,
+    config as never,
+    wallet as never,
+    { number: jest.fn().mockResolvedValue(1000) } as never,
+  );
   return { service, prisma, jwt, user, wallet };
 }
 

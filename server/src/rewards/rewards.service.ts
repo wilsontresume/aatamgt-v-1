@@ -1,9 +1,8 @@
 import { ConflictException, Injectable } from '@nestjs/common';
-import { ConfigService } from '@nestjs/config';
 import { PrismaService } from '../prisma/prisma.service';
 import { WalletService } from '../wallet/wallet.service';
 import { NotificationsService } from '../notifications/notifications.service';
-import { AppConfig } from '../config/configuration';
+import { SystemConfigService } from '../config/system-config.service';
 import { Prisma } from '@prisma/client';
 
 function utcToday(): Date {
@@ -17,16 +16,12 @@ function previousDay(date: Date): Date {
 
 @Injectable()
 export class RewardsService {
-  private readonly coins: AppConfig['coins'];
-
   constructor(
     private readonly prisma: PrismaService,
     private readonly wallet: WalletService,
     private readonly notifications: NotificationsService,
-    config: ConfigService,
-  ) {
-    this.coins = (config.get<AppConfig>('app') as AppConfig).coins;
-  }
+    private readonly systemConfig: SystemConfigService,
+  ) {}
 
   async status(userId: string) {
     const today = utcToday();
@@ -44,7 +39,7 @@ export class RewardsService {
     return {
       todayClaimed: Boolean(claimedToday),
       currentStreak: claimedToday ? claimedToday.streakDay : yesterdayStreak,
-      nextRewardCoins: this.coins.dailyLoginBonus,
+      nextRewardCoins: await this.systemConfig.number('coins.daily_reward'),
       nextStreakDay: nextStreak,
     };
   }
@@ -68,7 +63,7 @@ export class RewardsService {
     });
     const streakDay =
       last && last.rewardDate.getTime() === previousDay(today).getTime() ? last.streakDay + 1 : 1;
-    const coins = this.coins.dailyLoginBonus;
+    const coins = await this.systemConfig.number('coins.daily_reward');
     const dateKey = today.toISOString().slice(0, 10);
 
     const result = await this.wallet.credit(userId, coins, {

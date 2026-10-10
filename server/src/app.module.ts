@@ -30,6 +30,7 @@ import { CosmeticsModule } from './cosmetics/cosmetics.module';
 import { RankingsModule } from './rankings/rankings.module';
 import { ShopModule } from './shop/shop.module';
 import { AdminModule } from './admin/admin.module';
+import { SystemConfigModule } from './config/system-config.module';
 
 @Module({
   imports: [
@@ -39,6 +40,7 @@ import { AdminModule } from './admin/admin.module';
       load: [configuration],
       validate,
     }),
+    SystemConfigModule,
     ThrottlerModule.forRootAsync({
       inject: [ConfigService],
       useFactory: (config: ConfigService) => {

@@ -73,6 +73,11 @@ text = "History"
 variant = 1
 text = "Rankings"
 
+[node name="AdminButton" parent="Margin/Content" instance=ExtResource("3_btn")]
+visible = false
+variant = 1
+text = "Admin"
+
 [node name="SpacerBottom" type="Control" parent="Margin/Content"]
 size_flags_vertical = 3
 

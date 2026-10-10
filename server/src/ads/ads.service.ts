@@ -13,6 +13,7 @@ import { WalletService } from '../wallet/wallet.service';
 import { NotificationsService } from '../notifications/notifications.service';
 import { AdVerifierRegistry } from './ad-verifier';
 import { AppConfig } from '../config/configuration';
+import { SystemConfigService } from '../config/system-config.service';
 
 export const AD_TIERS = ['BONUS', 'STANDARD'] as const;
 export type AdTier = (typeof AD_TIERS)[number];
@@ -75,36 +76,36 @@ const sleep = (ms: number) => new Promise((resolve) => setTimeout(resolve, ms));
 @Injectable()
 export class AdsService {
   private readonly ads: AppConfig['ads'];
-  private readonly coins: AppConfig['coins'];
 
   constructor(
     private readonly prisma: PrismaService,
     private readonly wallet: WalletService,
     private readonly notifications: NotificationsService,
     private readonly verifiers: AdVerifierRegistry,
+    private readonly systemConfig: SystemConfigService,
     config: ConfigService,
   ) {
     const cfg = config.get<AppConfig>('app') as AppConfig;
     this.ads = cfg.ads;
-    this.coins = cfg.coins;
   }
 
   /** Public ad configuration: providers and unit IDs come from the
-   *  server env — the client hardcodes nothing. */
-  configView() {
+   *  server env — the client hardcodes nothing. Reward tiers and
+   *  interstitial thresholds are the live admin-configured values. */
+  async configView() {
     return {
       provider: this.ads.provider,
       rewardedUnitId: this.ads.rewardedUnitId,
       interstitialUnitId: this.ads.interstitialUnitId,
       sessionTtlSeconds: this.ads.sessionTtlSeconds,
       rewardedTiers: {
-        BONUS: this.coins.rewardedAdBonus,
-        STANDARD: this.coins.rewardedAdStandard,
+        BONUS: await this.systemConfig.number('ads.rewarded_bonus'),
+        STANDARD: await this.systemConfig.number('ads.rewarded_standard'),
       },
       interstitial: {
-        afterWins: this.ads.interstitialAfterWins,
-        afterLosses: this.ads.interstitialAfterLosses,
-        cooldownMatches: this.ads.interstitialCooldownMatches,
+        afterWins: await this.systemConfig.number('ads.interstitial_after_wins'),
+        afterLosses: await this.systemConfig.number('ads.interstitial_after_losses'),
+        cooldownMatches: await this.systemConfig.number('ads.interstitial_cooldown_matches'),
       },
     };
   }
@@ -178,7 +179,7 @@ export class AdsService {
       return this.redeemReplay(session);
     }
 
-    const coins = this.tierCoins(session.tier);
+    const coins = await this.tierCoins(session.tier);
     const result = await this.wallet.credit(userId, coins, {
       type: 'REWARDED_AD',
       refType: 'rewarded_ad',
@@ -232,8 +233,9 @@ export class AdsService {
     });
   }
 
-  private tierCoins(tier: string): number {
-    return tier === 'BONUS' ? this.coins.rewardedAdBonus : this.coins.rewardedAdStandard;
+  private async tierCoins(tier: string): Promise<number> {
+    const key = tier === 'BONUS' ? 'ads.rewarded_bonus' : 'ads.rewarded_standard';
+    return this.systemConfig.number(key);
   }
 
   // --- Interstitial ads -------------------------------------------------
@@ -292,9 +294,9 @@ export class AdsService {
     }
 
     const config: InterstitialConfig = {
-      afterWins: this.ads.interstitialAfterWins,
-      afterLosses: this.ads.interstitialAfterLosses,
-      cooldownMatches: this.ads.interstitialCooldownMatches,
+      afterWins: await this.systemConfig.number('ads.interstitial_after_wins'),
+      afterLosses: await this.systemConfig.number('ads.interstitial_after_losses'),
+      cooldownMatches: await this.systemConfig.number('ads.interstitial_cooldown_matches'),
     };
     const state: InterstitialState = {
       royalPassActive: Boolean(royalPassActive),

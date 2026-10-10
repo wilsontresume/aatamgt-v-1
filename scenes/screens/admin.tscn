@@ -1,0 +1,107 @@
+[gd_scene load_steps=4 format=3]
+
+[ext_resource type="Script" path="res://src/ui/screens/admin.gd" id="1_admin"]
+[ext_resource type="PackedScene" path="res://scenes/components/top_bar.tscn" id="2_tb"]
+[ext_resource type="PackedScene" path="res://scenes/components/button.tscn" id="3_btn"]
+
+[node name="Admin" type="Control"]
+anchor_right = 1.0
+anchor_bottom = 1.0
+grow_horizontal = 2
+grow_vertical = 2
+script = ExtResource("1_admin")
+
+[node name="Margin" type="MarginContainer" parent="."]
+anchor_right = 1.0
+anchor_bottom = 1.0
+grow_horizontal = 2
+grow_vertical = 2
+theme_override_constants/margin_left = 24
+theme_override_constants/margin_top = 20
+theme_override_constants/margin_right = 24
+theme_override_constants/margin_bottom = 24
+
+[node name="Content" type="VBoxContainer" parent="Margin"]
+theme_override_constants/separation = 12
+
+[node name="TopBar" parent="Margin/Content" instance=ExtResource("2_tb")]
+title = "Admin"
+show_back = true
+show_coins = false
+
+[node name="HintLabel" type="Label" parent="Margin/Content"]
+theme_type_variation = "Caption"
+autowrap_mode = 3
+text = ""
+
+[node name="AdminTabs" type="HBoxContainer" parent="Margin/Content"]
+theme_override_constants/separation = 8
+
+[node name="PlayersTab" parent="Margin/Content/AdminTabs" instance=ExtResource("3_btn")]
+toggle_mode = true
+custom_minimum_size = Vector2(0, 40)
+variant = 1
+text = "Players"
+
+[node name="GamesTab" parent="Margin/Content/AdminTabs" instance=ExtResource("3_btn")]
+toggle_mode = true
+custom_minimum_size = Vector2(0, 40)
+variant = 1
+text = "Games"
+
+[node name="EconomyTab" parent="Margin/Content/AdminTabs" instance=ExtResource("3_btn")]
+toggle_mode = true
+custom_minimum_size = Vector2(0, 40)
+variant = 1
+text = "Economy"
+
+[node name="ContentTab" parent="Margin/Content/AdminTabs" instance=ExtResource("3_btn")]
+toggle_mode = true
+custom_minimum_size = Vector2(0, 40)
+variant = 1
+text = "Content"
+
+[node name="ConfigTab" parent="Margin/Content/AdminTabs" instance=ExtResource("3_btn")]
+toggle_mode = true
+custom_minimum_size = Vector2(0, 40)
+variant = 1
+text = "Config"
+
+[node name="AuditTab" parent="Margin/Content/AdminTabs" instance=ExtResource("3_btn")]
+toggle_mode = true
+custom_minimum_size = Vector2(0, 40)
+variant = 1
+text = "Audit"
+
+[node name="SearchRow" type="HBoxContainer" parent="Margin/Content"]
+theme_override_constants/separation = 8
+
+[node name="SearchEdit" type="LineEdit" parent="Margin/Content/SearchRow"]
+size_flags_horizontal = 3
+placeholder_text = "Search username or email"
+
+[node name="SearchButton" parent="Margin/Content/SearchRow" instance=ExtResource("3_btn")]
+custom_minimum_size = Vector2(140, 40)
+variant = 1
+text = "Search"
+
+[node name="FilterRow" type="HBoxContainer" parent="Margin/Content"]
+theme_override_constants/separation = 8
+
+[node name="Scroll" type="ScrollContainer" parent="Margin/Content"]
+layout_mode = 2
+size_flags_vertical = 3
+horizontal_scroll_mode = 0
+
+[node name="Column" type="VBoxContainer" parent="Margin/Content/Scroll"]
+layout_mode = 2
+size_flags_horizontal = 3
+theme_override_constants/separation = 8
+
+[node name="ListRows" type="VBoxContainer" parent="Margin/Content/Scroll/Column"]
+layout_mode = 2
+theme_override_constants/separation = 6
+
+[node name="DetailRows" type="VBoxContainer" parent="Margin/Content/Scroll/Column"]
+layout_mode = 2
+theme_override_constants/separation = 6

@@ -12,6 +12,7 @@ import { AppConfig } from '../config/configuration';
 import { PrismaService } from '../prisma/prisma.service';
 import { WalletService } from '../wallet/wallet.service';
 import { CATALOG, ShopProduct, findProduct, ROYAL_PASS_PRODUCT_KEY } from './catalog';
+import { SystemConfigService } from '../config/system-config.service';
 import { StoreVerification, StoreVerifierRegistry } from './store-verifier';
 
 export const PLATFORMS = ['GOOGLE_PLAY', 'APPLE_APP_STORE'] as const;
@@ -78,6 +79,7 @@ export class ShopService {
     private readonly wallet: WalletService,
     private readonly registry: StoreVerifierRegistry,
     private readonly config: ConfigService,
+    private readonly systemConfig: SystemConfigService,
   ) {}
 
   private get cfg(): AppConfig {
@@ -90,19 +92,29 @@ export class ShopService {
    * Public catalog. Items never carry prices — in production the
    * store client owns pricing. `prices` appears only when the dev
    * store simulator is on (fixture prices for the simulator).
+   * Royal Pass duration and availability are admin-configurable
+   * (Phase 15); disabled products disappear from the catalog.
    */
-  catalog() {
+  async catalog() {
     const iap = this.cfg.iap;
-    return {
-      devStore: iap.devStore,
-      items: CATALOG.map((p) => ({
+    const passEnabled = await this.systemConfig.boolean('shop.royal_pass_enabled');
+    const passDays = await this.systemConfig.number('shop.royal_pass_days');
+    const items = CATALOG.filter(
+      (p) => passEnabled || p.productKey !== ROYAL_PASS_PRODUCT_KEY,
+    ).map((p) => {
+      const isPass = p.productKey === ROYAL_PASS_PRODUCT_KEY;
+      return {
         productKey: p.productKey,
         kind: p.kind,
         coins: p.coins,
-        passDays: p.passDays,
-        title: p.title,
+        passDays: isPass ? passDays : p.passDays,
+        title: isPass ? `Royal Pass (${passDays} days)` : p.title,
         sortOrder: p.sortOrder,
-      })),
+      };
+    });
+    return {
+      devStore: iap.devStore,
+      items,
       prices: iap.devStore ? iap.devPrices : undefined,
     };
   }
@@ -112,6 +124,7 @@ export class ShopService {
   async submit(userId: string, input: SubmitPurchaseInput): Promise<SubmitResult> {
     const platform = this.normalizePlatform(input.platform);
     const product = this.resolveProduct(input.productId);
+    await this.assertAvailable(product);
     if (!input.purchaseToken) {
       throw new BadRequestException('purchaseToken is required');
     }
@@ -145,6 +158,7 @@ export class ShopService {
         continue;
       }
       try {
+        await this.assertAvailable(product);
         const existing = await this.prisma.purchase.findUnique({
           where: {
             platform_purchaseToken: { platform, purchaseToken: item.purchaseToken },
@@ -184,11 +198,12 @@ export class ShopService {
     verification: StoreVerification,
   ): Promise<SubmitResult> {
     const now = new Date();
+    const passDays = await this.passDaysFor(product);
     if (verification.state === 'PENDING') {
       const row = await this.upsertUnsettled(userId, platform, product, token, verification, {
         state: 'PENDING',
         verifiedAt: now,
-      });
+      }, passDays);
       return this.envelope(userId, 'pending', row);
     }
     if (verification.state === 'CANCELED') {
@@ -198,7 +213,7 @@ export class ShopService {
         verifiedAt: now,
         revokedAt: now,
         revocationReason: 'store_canceled',
-      });
+      }, passDays);
       return this.envelope(userId, 'canceled', row);
     }
 
@@ -229,7 +244,7 @@ export class ShopService {
         });
         return this.envelope(userId, 'granted', purchase, credit.wallet.balance);
       }
-      const purchase = await this.grantPass(userId, platform, product, token, verification);
+      const purchase = await this.grantPass(userId, platform, product, token, verification, passDays);
       return this.envelope(userId, 'granted', purchase);
     } catch (error) {
       if (this.isUniqueViolation(error)) {
@@ -249,6 +264,7 @@ export class ShopService {
     product: ShopProduct,
     token: string,
     verification: StoreVerification,
+    passDays: number,
   ) {
     const now = new Date();
     return this.prisma.$transaction(async (tx) => {
@@ -257,7 +273,7 @@ export class ShopService {
       >`SELECT royalPassExpiresAt FROM User WHERE id = ${userId} FOR UPDATE`;
       const current = rows[0]?.royalPassExpiresAt ?? null;
       const base = current && current.getTime() > now.getTime() ? current : now;
-      const next = new Date(base.getTime() + product.passDays * DAY_MS);
+      const next = new Date(base.getTime() + passDays * DAY_MS);
       await tx.user.update({
         where: { id: userId },
         data: { royalPassExpiresAt: next },
@@ -271,7 +287,7 @@ export class ShopService {
           orderId: verification.orderId || null,
           state: 'GRANTED',
           coinAmount: 0,
-          passDays: product.passDays,
+          passDays,
           entitlementPreviousExpiresAt: current,
           entitlementExpiresAt: next,
           verifiedAt: now,
@@ -295,6 +311,7 @@ export class ShopService {
       revokedAt?: Date;
       revocationReason?: string;
     },
+    passDays: number,
   ) {
     try {
       return await this.prisma.purchase.create({
@@ -306,7 +323,7 @@ export class ShopService {
           orderId: verification.orderId || null,
           state: data.state,
           coinAmount: product.coins,
-          passDays: product.passDays,
+          passDays,
           verifiedAt: data.verifiedAt,
           revokedAt: data.revokedAt,
           revocationReason: data.revocationReason,
@@ -504,6 +521,7 @@ export class ShopService {
           product,
           token,
           verification,
+          await this.passDaysFor(product),
         );
       }
       await this.prisma.purchase.update({
@@ -616,6 +634,7 @@ export class ShopService {
   async devIssue(userId: string, productId: string) {
     this.assertDevStore();
     const product = this.resolveProduct(productId);
+    await this.assertAvailable(product);
     const token = `dst_${createHash('sha256')
       .update(`${userId}:${productId}:${Date.now()}:${Math.random()}`)
       .digest('hex')}`;
@@ -684,6 +703,20 @@ export class ShopService {
     const product = findProduct(productId);
     if (!product) throw new NotFoundException('Unknown product');
     return product;
+  }
+
+  /** Live Royal Pass duration — static defaults for coin products. */
+  private async passDaysFor(product: ShopProduct): Promise<number> {
+    if (product.productKey !== ROYAL_PASS_PRODUCT_KEY) return product.passDays;
+    return this.systemConfig.number('shop.royal_pass_days');
+  }
+
+  /** Admin-disabled products can be neither bought, issued nor restored. */
+  private async assertAvailable(product: ShopProduct): Promise<void> {
+    if (product.productKey !== ROYAL_PASS_PRODUCT_KEY) return;
+    if (!(await this.systemConfig.boolean('shop.royal_pass_enabled'))) {
+      throw new BadRequestException('Royal Pass is currently unavailable');
+    }
   }
 
   private walletKey(prefix: string, platform: string, token: string): string {

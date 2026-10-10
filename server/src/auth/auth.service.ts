@@ -13,6 +13,7 @@ import { PrismaService } from '../prisma/prisma.service';
 import { WalletService } from '../wallet/wallet.service';
 import { sha256 } from '../common/crypto.service';
 import { AppConfig } from '../config/configuration';
+import { SystemConfigService } from '../config/system-config.service';
 import { LoginDto, RegisterDto } from './dto/auth.dto';
 import * as bcrypt from 'bcryptjs';
 
@@ -44,6 +45,7 @@ export class AuthService {
     private readonly jwt: JwtService,
     private readonly config: ConfigService,
     private readonly wallet: WalletService,
+    private readonly systemConfig: SystemConfigService,
   ) {
     this.cfg = this.config.get<AppConfig>('app') as AppConfig;
   }
@@ -79,7 +81,9 @@ export class AuthService {
 
     // Phase 7: welcome grant. Server-computed, idempotent per user — the
     // client never asks for a specific amount and cannot replay it.
-    await this.wallet.credit(user.id, this.cfg.coins.registrationBonus, {
+    // Phase 15: the amount is the live admin-configured bonus.
+    const bonus = await this.systemConfig.number('coins.registration_bonus');
+    await this.wallet.credit(user.id, bonus, {
       type: 'REGISTRATION_BONUS',
       refType: 'registration',
       refId: user.id,
