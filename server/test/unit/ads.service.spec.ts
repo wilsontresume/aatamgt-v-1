@@ -1,4 +1,6 @@
+import { ServiceUnavailableException } from '@nestjs/common';
 import {
+  AdsService,
   evaluateInterstitial,
   InterstitialConfig,
   InterstitialState,
@@ -115,6 +117,68 @@ describe('evaluateInterstitial (Phase 8 pure rules)', () => {
 
   it('is not eligible during cooldown without any trigger', () => {
     const verdict = evaluateInterstitial(state({ matchesSinceLastShow: 1 }), RULES);
-    expect(verdict).toEqual({ eligible: false, reason: 'NOT_YET' });
+    expect(verdict).toEqual({ eligible: false, reason: 'COOLDOWN' });
+  });
+});
+
+function makeAds(provider: string, nodeEnv: string): {
+  service: AdsService;
+  prisma: { adSession: Record<string, jest.Mock> };
+} {
+  const prisma = {
+    adSession: {
+      create: jest.fn().mockResolvedValue({ id: 's1' }),
+      findUnique: jest.fn(),
+      updateMany: jest.fn(),
+    },
+  };
+  const config = {
+    get: jest.fn().mockReturnValue({
+      ads: { provider, sessionTtlSeconds: 300, interstitial: RULES },
+      nodeEnv,
+    }),
+  };
+  const service = new AdsService(
+    prisma as never,
+    {} as never, // wallet — never reached: the gate fires first
+    {} as never, // notifications
+    { get: jest.fn() } as never, // verifier registry
+    {} as never, // systemConfig
+    config as never,
+  );
+  return { service, prisma };
+}
+
+describe('rewarded ads fail closed in production (F4 regression)', () => {
+  it('refuses to mint a session with the stub provider in production', async () => {
+    const { service, prisma } = makeAds('stub', 'production');
+    await expect(service.createRewardedSession('u1', 'STANDARD')).rejects.toThrow(
+      ServiceUnavailableException,
+    );
+    expect(prisma.adSession.create).not.toHaveBeenCalled();
+  });
+
+  it('refuses to redeem a session with the stub provider in production', async () => {
+    const { service, prisma } = makeAds('stub', 'production');
+    await expect(service.redeemRewarded('u1', 'some-nonce')).rejects.toThrow(
+      ServiceUnavailableException,
+    );
+    expect(prisma.adSession.findUnique).not.toHaveBeenCalled();
+  });
+
+  it('mints sessions in production when a real provider is configured', async () => {
+    const { service, prisma } = makeAds('admob', 'production');
+    await expect(service.createRewardedSession('u1', 'STANDARD')).resolves.toMatchObject({
+      id: 's1',
+    });
+    expect(prisma.adSession.create).toHaveBeenCalledTimes(1);
+  });
+
+  it('keeps the stub provider available outside production', async () => {
+    const { service, prisma } = makeAds('stub', 'test');
+    await expect(service.createRewardedSession('u1', 'BONUS')).resolves.toMatchObject({
+      id: 's1',
+    });
+    expect(prisma.adSession.create).toHaveBeenCalledTimes(1);
   });
 });

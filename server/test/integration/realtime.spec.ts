@@ -3,7 +3,14 @@ import { AddressInfo } from 'node:net';
 import { io, Socket } from 'socket.io-client';
 import request from 'supertest';
 import { createTestApp } from '../helpers/app';
-import { apiPrefix, auth, createGameFixture, registerUser } from '../helpers/fixtures';
+import {
+  apiPrefix,
+  auth,
+  closePrisma,
+  createGameFixture,
+  prisma,
+  registerUser,
+} from '../helpers/fixtures';
 
 function waitFor<T>(socket: Socket, event: string, timeoutMs = 5000): Promise<T> {
   return new Promise<T>((resolve, reject) => {
@@ -50,6 +57,7 @@ describe('Realtime gateway (integration)', () => {
 
   afterAll(async () => {
     await app.close();
+    await closePrisma();
   });
 
   it('rejects connections without a valid access token', async () => {
@@ -116,5 +124,30 @@ describe('Realtime gateway (integration)', () => {
 
     aliceSocket.close();
     bobSocket.close();
+  });
+
+  it("rejects a banned account's still-unexpired token at the handshake", async () => {
+    const victim = await registerUser(app);
+
+    const ok = io(url, {
+      transports: ['websocket'],
+      reconnection: false,
+      auth: { token: victim.accessToken },
+    });
+    await waitFor(ok, 'connected');
+    ok.close();
+
+    await prisma().user.update({ where: { id: victim.id }, data: { status: 'BANNED' } });
+
+    const banned = io(url, {
+      transports: ['websocket'],
+      reconnection: false,
+      auth: { token: victim.accessToken },
+    });
+    const error = await waitFor<{ code: string; reason?: string }>(banned, 'error');
+    expect(error.code).toBe('unauthorized');
+    banned.close();
+
+    await prisma().user.update({ where: { id: victim.id }, data: { status: 'ACTIVE' } });
   });
 });

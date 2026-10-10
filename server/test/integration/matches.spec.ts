@@ -1,7 +1,14 @@
 import { INestApplication } from '@nestjs/common';
 import request from 'supertest';
 import { createTestApp } from '../helpers/app';
-import { apiPrefix, auth, createGameFixture, registerUser } from '../helpers/fixtures';
+import {
+  apiPrefix,
+  auth,
+  closePrisma,
+  createGameFixture,
+  prisma,
+  registerUser,
+} from '../helpers/fixtures';
 
 describe('Matches (integration)', () => {
   let app: INestApplication;
@@ -23,6 +30,7 @@ describe('Matches (integration)', () => {
 
   afterAll(async () => {
     await app.close();
+    await closePrisma();
   });
 
   it('creates a pending match with the creator seated', async () => {
@@ -95,17 +103,53 @@ describe('Matches (integration)', () => {
     expect(res.body.completedAt).toBeNull();
   });
 
-  it('abandons the match when a participant leaves', async () => {
+  it('hides the match from non-participants (horizontal read regression)', async () => {
+    const res = await request(app.getHttpServer())
+      .get(`${apiPrefix(app)}/matches/${matchId}`)
+      .set(auth(carol.accessToken));
+    expect(res.status).toBe(403);
+    expect(res.body.moves).toBeUndefined();
+  });
+
+  it('rejects malformed history limits instead of crashing', async () => {
+    const notANumber = await request(app.getHttpServer())
+      .get(`${apiPrefix(app)}/matches/${matchId}?history=abc`)
+      .set(auth(alice.accessToken));
+    expect(notANumber.status).toBe(400);
+
+    const negative = await request(app.getHttpServer())
+      .get(`${apiPrefix(app)}/matches/${matchId}?history=-5`)
+      .set(auth(alice.accessToken));
+    expect(negative.status).toBe(400);
+
+    const tooLarge = await request(app.getHttpServer())
+      .get(`${apiPrefix(app)}/matches/${matchId}?history=500`)
+      .set(auth(alice.accessToken));
+    expect(tooLarge.status).toBe(400);
+  });
+
+  it('records a loss for the player who leaves an active match', async () => {
+    const bobProfileBefore = await prisma().profile.findUnique({ where: { userId: bob.id } });
+    expect(bobProfileBefore).not.toBeNull();
+
     const res = await request(app.getHttpServer())
       .post(`${apiPrefix(app)}/matches/${matchId}/leave`)
       .set(auth(bob.accessToken));
     expect(res.status).toBe(200);
-    expect(res.body.status).toBe('ABANDONED');
-    expect(
-      res.body.players.every((p: { userId: string; result: string }) =>
-        p.userId === bob.id ? p.result === 'ABANDONED' : p.result === 'PENDING',
-      ),
-    ).toBe(true);
+    expect(res.body.status).toBe('COMPLETED');
+
+    const results: Record<string, string> = Object.fromEntries(
+      res.body.players.map((p: { userId: string; result: string }) => [p.userId, p.result]),
+    );
+    expect(results[bob.id]).toBe('LOSS');
+    expect(results[alice.id]).toBe('WIN');
+
+    // The dodge regression: before the fix the leaver's record and rating
+    // were left untouched, so a losing player could quit to avoid a loss.
+    const bobProfileAfter = await prisma().profile.findUnique({ where: { userId: bob.id } });
+    expect(bobProfileAfter!.losses).toBe(bobProfileBefore!.losses + 1);
+    expect(bobProfileAfter!.rating).toBeLessThan(bobProfileBefore!.rating);
+    expect(bobProfileAfter!.gamesPlayed).toBe(bobProfileBefore!.gamesPlayed + 1);
 
     const move = await request(app.getHttpServer())
       .post(`${apiPrefix(app)}/matches/${matchId}/moves`)

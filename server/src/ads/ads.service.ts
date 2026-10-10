@@ -4,6 +4,7 @@ import {
   GoneException,
   Injectable,
   NotFoundException,
+  ServiceUnavailableException,
 } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import { randomBytes } from 'node:crypto';
@@ -58,12 +59,18 @@ export function evaluateInterstitial(
 ): { eligible: boolean; reason: InterstitialReason } {
   if (state.royalPassActive) return { eligible: false, reason: 'ROYAL_PASS' };
   if (state.inProgress) return { eligible: false, reason: 'IN_PROGRESS' };
+  // Inside the cooldown window (but past the first match since the last
+  // show) the cooldown is the binding constraint and the reason shown —
+  // whether or not a trigger has also fired.
+  if (
+    state.matchesSinceLastShow > 0 &&
+    state.matchesSinceLastShow < config.cooldownMatches
+  ) {
+    return { eligible: false, reason: 'COOLDOWN' };
+  }
   const winTrigger = state.winsSinceLastShow >= config.afterWins;
   const lossTrigger = state.consecutiveLosses >= config.afterLosses;
   if (!winTrigger && !lossTrigger) return { eligible: false, reason: 'NOT_YET' };
-  if (state.matchesSinceLastShow < config.cooldownMatches) {
-    return { eligible: false, reason: 'COOLDOWN' };
-  }
   return { eligible: true, reason: winTrigger ? 'WINS' : 'LOSSES' };
 }
 
@@ -76,6 +83,7 @@ const sleep = (ms: number) => new Promise((resolve) => setTimeout(resolve, ms));
 @Injectable()
 export class AdsService {
   private readonly ads: AppConfig['ads'];
+  private readonly nodeEnv: string;
 
   constructor(
     private readonly prisma: PrismaService,
@@ -87,6 +95,21 @@ export class AdsService {
   ) {
     const cfg = config.get<AppConfig>('app') as AppConfig;
     this.ads = cfg.ads;
+    this.nodeEnv = cfg.nodeEnv;
+  }
+
+  /**
+   * The built-in `stub` verifier performs no external check, so it is a
+   * development convenience only. In production a session minted and
+   * redeemed against it would mint coins out of nothing — rewarded ads
+   * must fail closed until a real provider verifier is registered.
+   */
+  private assertRewardedProvider(): void {
+    if (this.ads.provider === 'stub' && this.nodeEnv === 'production') {
+      throw new ServiceUnavailableException(
+        'Rewarded ads are unavailable: no real ad provider is configured',
+      );
+    }
   }
 
   /** Public ad configuration: providers and unit IDs come from the
@@ -117,6 +140,7 @@ export class AdsService {
    * Without one of these sessions a client callback can never redeem.
    */
   async createRewardedSession(userId: string, tier: string): Promise<AdSession> {
+    this.assertRewardedProvider();
     if (!AD_TIERS.includes(tier as AdTier)) {
       throw new BadRequestException('Unknown ad tier — expected BONUS or STANDARD');
     }
@@ -152,6 +176,9 @@ export class AdsService {
     if (typeof nonce !== 'string' || nonce.length === 0) {
       throw new BadRequestException('nonce is required');
     }
+    // Defense in depth: sessions minted before an operator switched the
+    // provider to stub must not be redeemable in production either.
+    this.assertRewardedProvider();
     const session = await this.prisma.adSession.findUnique({ where: { nonce } });
     // Missing and foreign sessions fail identically: no existence oracle.
     if (!session || session.userId !== userId) {

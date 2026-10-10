@@ -31,7 +31,14 @@ async function bootstrap(): Promise<void> {
   const config = app.get(ConfigService);
   const cfg = config.get<AppConfig>('app') as AppConfig;
 
-  app.useLogger(new PinoLoggerService(cfg.logLevel));
+  const logger = new PinoLoggerService(cfg.logLevel);
+  app.useLogger(logger);
+  if (cfg.nodeEnv === 'production' && !httpsOptions) {
+    logger.warn(
+      'Serving plain HTTP in production — set TLS_CERT_PATH/TLS_KEY_PATH or terminate TLS at a reverse proxy in front of this process',
+      'Bootstrap',
+    );
+  }
   configureApp(app, cfg);
   app.enableShutdownHooks();
 

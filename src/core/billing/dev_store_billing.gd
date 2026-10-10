@@ -22,7 +22,7 @@ func is_available() -> bool:
 	return _api != null and _api.is_configured()
 
 
-func purchase(product_id: String) -> Dictionary:
+func purchase(product_id: String, _account_id := "") -> Dictionary:
 	if not _auth.is_authenticated():
 		return {"ok": false, "error": "Sign in to purchase."}
 	var res: Dictionary = await _api.request_json(

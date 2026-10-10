@@ -165,22 +165,25 @@ export class MatchesService {
     }
 
     if (match.status === 'ACTIVE') {
-      await this.prisma.matchPlayer.update({
-        where: { id: player.id },
-        data: { result: 'ABANDONED', leftAt: new Date() },
+      // Voluntary mid-match leave is a resignation. The server decides
+      // the result — the opponent wins, records and ratings update — so
+      // a losing player cannot dodge a recorded loss by leaving instead
+      // of resigning, which is exactly the penalty the disconnect-grace
+      // path applies to players who merely drop their socket.
+      try {
+        await this.completeByResignation(userId, matchId);
+      } catch (error) {
+        // The match finished while we raced it (turn clock, resign,
+        // admin finalize): surface its current state instead of failing.
+        const fresh = await this.requireMatch(matchId, {
+          players: { include: { user: { select: { username: true } } } },
+        });
+        if (fresh.status === 'ACTIVE') throw error;
+        return fresh;
+      }
+      return this.requireMatch(matchId, {
+        players: { include: { user: { select: { username: true } } } },
       });
-      const abandoned = await this.prisma.gameMatch.update({
-        where: { id: matchId },
-        data: {
-          status: 'ABANDONED',
-          completedAt: new Date(),
-          stateVersion: { increment: 1 },
-        },
-        include: { players: { include: { user: { select: { username: true } } } } },
-      });
-      this.clock.disarmMatch(matchId);
-      this.publishStatus(abandoned, { status: abandoned.status });
-      return abandoned;
     }
 
     throw new ConflictException('Match is already finished');
@@ -425,6 +428,15 @@ export class MatchesService {
 
   /** A participant resigns: the opponent wins, server records everything. */
   async resign(userId: string, matchId: string) {
+    return this.completeByResignation(userId, matchId);
+  }
+
+  /**
+   * Shared server-decided completion for voluntary exits (resign, and
+   * REST leave during an ACTIVE match): row-locked, opponent wins,
+   * profiles/ratings/rankings updated in the same transaction.
+   */
+  private async completeByResignation(userId: string, matchId: string) {
     const outcome = await this.prisma.$transaction(async (tx) => {
       await tx.$queryRaw`SELECT id FROM GameMatch WHERE id = ${matchId} FOR UPDATE`;
       const match = await tx.gameMatch.findUnique({ where: { id: matchId }, include: { players: true } });

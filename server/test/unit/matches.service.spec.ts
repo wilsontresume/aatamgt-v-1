@@ -69,6 +69,11 @@ function makeMatches(
       }),
       findMany: jest.fn().mockResolvedValue([]),
     },
+    profile: {
+      findMany: jest.fn().mockResolvedValue([]),
+      updateMany: jest.fn().mockResolvedValue({}),
+      update: jest.fn().mockResolvedValue({}),
+    },
     $transaction: jest.fn(async (fn: (tx: unknown) => Promise<unknown>) => fn(prisma)),
   };
   const games = { getByKey: jest.fn().mockResolvedValue(game) };
@@ -177,20 +182,35 @@ describe('MatchesService', () => {
     expect(JSON.stringify(updateData)).not.toMatch(/WIN|LOSS|DRAW|winner/i);
   });
 
-  it('abandons an active match on leave without declaring a winner', async () => {
-    const active = matchRow({ status: 'ACTIVE' });
-    const abandoned = matchRow({ status: 'ABANDONED', completedAt: new Date() });
-    const { service, prisma, events } = makeMatches({ match: active });
-    (prisma.gameMatch.update as jest.Mock).mockResolvedValue(abandoned);
+  it('treats an active leave as a server-decided resignation (loss-dodge regression)', async () => {
+    const players = [player('u1', 0), player('u2', 1)];
+    const active = matchRow({ status: 'ACTIVE', players });
+    const completed = matchRow({ status: 'COMPLETED', completedAt: new Date(), players });
+    const { service, prisma, events, clock, rankings } = makeMatches({ match: active });
+    prisma.gameMatch.findUnique
+      .mockResolvedValueOnce(active) // leave() snapshot
+      .mockResolvedValueOnce(active) // locked read inside the transaction
+      .mockResolvedValue(completed); // final refetch
+    prisma.gameMatch.update.mockResolvedValue(completed);
 
-    const result = await service.leave('u1', 'm1');
+    const result = await service.leave('u2', 'm1');
 
-    expect(result.status).toBe('ABANDONED');
-    expect(prisma.matchPlayer.update).toHaveBeenCalledWith(
-      expect.objectContaining({ data: expect.objectContaining({ result: 'ABANDONED' }) }),
+    expect(result.status).toBe('COMPLETED');
+    // u2 (seat 1) left, so seat 0 wins and both results are decided —
+    // before the fix the match ended ABANDONED with no result at all.
+    const results = prisma.matchPlayer.update.mock.calls.map(
+      (call: [{ data: { result: string } }]) => call[0].data.result,
     );
-    expect(JSON.stringify(prisma.matchPlayer.update.mock.calls)).not.toMatch(/"WIN"/);
-    expect(events.publish).toHaveBeenCalledWith(expect.objectContaining({ kind: 'status' }));
+    expect(results).toEqual(['WIN', 'LOSS']);
+    expect(prisma.profile.updateMany).toHaveBeenCalledTimes(2);
+    expect(rankings.applyMatchResult).toHaveBeenCalledTimes(1);
+    expect(clock.disarmMatch).toHaveBeenCalledWith('m1');
+    expect(events.publish).toHaveBeenCalledWith(
+      expect.objectContaining({
+        kind: 'status',
+        data: expect.objectContaining({ status: 'COMPLETED' }),
+      }),
+    );
   });
 
   it('cancels a solo pending match created by the owner', async () => {

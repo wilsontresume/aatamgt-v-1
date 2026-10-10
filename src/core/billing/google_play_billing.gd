@@ -10,6 +10,9 @@ extends BillingProvider
 ## Bridge contract (plugin methods/signals):
 ##   queryProductDetails(productIds) -> signal product_details_updated(error, products)
 ##   makePurchase(productDetail)     -> signal purchase_updated(error, purchase)
+##       productDetail may carry "obfuscated_account_id": the backend
+##       user id; Play echoes it so the server can bind the purchase
+##       token to the buying account.
 ##   queryPurchases()                -> signal purchases_updated(error, purchases)
 
 const PLUGIN_NAME := "GodotGooglePlayBilling"
@@ -47,15 +50,20 @@ func query_products(product_ids: Array) -> Array:
 	return out
 
 
-func purchase(product_id: String) -> Dictionary:
+func purchase(product_id: String, account_id := "") -> Dictionary:
 	if _billing == null:
 		return {"ok": false, "error": "Google Play Billing is unavailable."}
 	var details: Array = await query_products([product_id])
 	if details.is_empty():
 		return {"ok": false,
 				"error": "This product is not available from the store."}
+	var detail: Dictionary = details[0]
+	if not account_id.is_empty():
+		# Play echoes this back (obfuscatedAccountId) and the backend
+		# rejects tokens whose owner does not match the caller.
+		detail["obfuscated_account_id"] = account_id
 	var result: Array = await _call_and_await(
-			&"purchase_updated", &"makePurchase", [details[0]])
+			&"purchase_updated", &"makePurchase", [detail])
 	if int(result[0]) != BILLING_OK:
 		return {"ok": false,
 				"error": "The store did not complete the purchase."}

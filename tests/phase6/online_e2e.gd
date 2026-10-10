@@ -213,8 +213,12 @@ func _test_create_and_join() -> void:
 	_match1 = _app.online.match_id
 	_check(_app.online.match_status == "PENDING",
 			"creator starts PENDING (got %s)" % _app.online.match_status)
-	_check(_app.online.seat == 0 and _app.online.side == "goats",
-			"creator is seated first as goats (seat %d, %s)"
+	# Seat and side land asynchronously when the creator's subscribe
+	# completes; wait for them rather than sampling one frame after the
+	# create response (which only worked when the backend was local).
+	var seated := await _wait_until(func() -> bool:
+			return _app.online.seat == 0 and _app.online.side == "goats", 8.0)
+	_check(seated, "creator is seated first as goats (seat %d, %s)"
 			% [_app.online.seat, _app.online.side])
 	var subscribed := await _wait_until(func() -> bool:
 			return _app.online.seat == 0, 8.0)

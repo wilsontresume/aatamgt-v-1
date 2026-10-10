@@ -99,7 +99,8 @@ func buy(product_key: String) -> Dictionary:
 		return _fail("Sign in to purchase.")
 	if _billing == null or not _billing.is_available():
 		return _fail("The store is unavailable right now.")
-	var token: Dictionary = await _billing.purchase(product_key)
+	var token: Dictionary = await _billing.purchase(
+			product_key, _auth.get_player_id())
 	if not token.get("ok", false):
 		return _fail(str(token.get("error", "The store cancelled the purchase.")))
 	var res: Dictionary = await _auth.authenticated_post("/purchases", {

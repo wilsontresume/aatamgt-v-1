@@ -1,6 +1,24 @@
-import { Body, Controller, Get, HttpCode, Param, Post, Query } from '@nestjs/common';
+import {
+  Body,
+  Controller,
+  ForbiddenException,
+  Get,
+  HttpCode,
+  Param,
+  Post,
+  Query,
+} from '@nestjs/common';
 import { Type } from 'class-transformer';
-import { IsIn, IsInt, IsObject, IsOptional, IsString, Matches, Min } from 'class-validator';
+import {
+  IsIn,
+  IsInt,
+  IsObject,
+  IsOptional,
+  IsString,
+  Matches,
+  Max,
+  Min,
+} from 'class-validator';
 import { MatchesService } from './matches.service';
 import { CurrentUser, AuthUser } from '../common/decorators/current-user.decorator';
 
@@ -31,6 +49,15 @@ class SubmitMoveBody {
   clientSeq?: number;
 }
 
+class MatchViewQuery {
+  @IsOptional()
+  @Type(() => Number)
+  @IsInt()
+  @Min(0)
+  @Max(200)
+  history?: number;
+}
+
 @Controller('matches')
 export class MatchesController {
   constructor(private readonly matches: MatchesService) {}
@@ -47,10 +74,21 @@ export class MatchesController {
     return { items: list.map((m) => this.matches.serialize(m)) };
   }
 
+  /**
+   * Match snapshots are participant-only: the board state, move history
+   * and player list are gameplay data, so an unrelated account gets 403
+   * instead of a horizontal read of any match id it can guess.
+   */
   @Get(':id')
-  async get(@Param('id') id: string, @Query('history') history?: string) {
-    const limit = history ? Number(history) : 50;
-    const match = await this.matches.getMatch(id, { includeHistory: limit });
+  async get(
+    @CurrentUser() auth: AuthUser,
+    @Param('id') id: string,
+    @Query() query: MatchViewQuery,
+  ) {
+    const match = await this.matches.getMatch(id, { includeHistory: query.history ?? 50 });
+    if (!match.players.some((p) => p.userId === auth.id)) {
+      throw new ForbiddenException('Only match participants can view this match');
+    }
     return {
       ...this.matches.serialize(match),
       moves: match.moves.map((m) => ({

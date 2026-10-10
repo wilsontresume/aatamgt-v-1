@@ -15,6 +15,7 @@ import { MatchEventsService, MatchEvent } from '../events/match-events.service';
 import { MatchesService, SubmitMoveDto } from '../matches/matches.service';
 import { sideKeyForSeat } from '../matches/engine-adapters';
 import { MatchClockService } from '../matches/match-clock.service';
+import { PrismaService } from '../prisma/prisma.service';
 import { AccessTokenPayload } from '../auth/auth.service';
 import { AppConfig } from '../config/configuration';
 
@@ -53,6 +54,7 @@ export class RealtimeGateway implements OnGatewayConnection, OnGatewayDisconnect
     private readonly matches: MatchesService,
     private readonly events: MatchEventsService,
     private readonly clock: MatchClockService,
+    private readonly prisma: PrismaService,
   ) {
     this.cfg = config.get<AppConfig>('app') as AppConfig;
     this.events.events$.subscribe((event) => this.broadcast(event));
@@ -68,16 +70,43 @@ export class RealtimeGateway implements OnGatewayConnection, OnGatewayDisconnect
       return;
     }
 
+    // The handshake promise is bound synchronously: a command packet
+    // that races the JWT + database re-read awaits it (awaitHandshake)
+    // instead of seeing an unbound identity. The account re-read is what
+    // keeps banned, suspended or deleted users from holding a socket on
+    // an unexpired token issued before the ban (mirrors JwtStrategy).
+    client.data.handshake = this.completeHandshake(client, token);
+  }
+
+  private async completeHandshake(client: Socket, token: string): Promise<void> {
     try {
       const payload = await this.jwt.verifyAsync<AccessTokenPayload>(token, {
         secret: this.cfg.jwt.accessSecret,
       });
+      const user = await this.prisma.user.findUnique({
+        where: { id: payload.sub },
+        select: { username: true, status: true, deletedAt: true },
+      });
+      if (!user || user.deletedAt) {
+        this.reject(client, 'invalid token');
+        return;
+      }
+      if (user.status !== 'ACTIVE') {
+        this.reject(client, 'account_inactive');
+        return;
+      }
       client.data.userId = payload.sub;
-      client.data.username = payload.username;
-      client.emit('connected', { userId: payload.sub, username: payload.username });
+      client.data.username = user.username;
+      client.emit('connected', { userId: payload.sub, username: user.username });
     } catch {
       this.reject(client, 'invalid token');
     }
+  }
+
+  /** Waits for the connection handshake to finish before using its identity. */
+  private async awaitHandshake(client: Socket): Promise<void> {
+    const handshake = client.data.handshake as Promise<void> | undefined;
+    if (handshake) await handshake;
   }
 
   handleDisconnect(client: Socket): void {
@@ -107,6 +136,7 @@ export class RealtimeGateway implements OnGatewayConnection, OnGatewayDisconnect
 
   @SubscribeMessage('match:subscribe')
   async onSubscribe(@MessageBody() body: SubscribePayload, @ConnectedSocket() client: Socket) {
+    await this.awaitHandshake(client);
     const userId = this.userId(client);
     if (!body?.matchId) return { ok: false, error: 'matchId is required' };
 
@@ -175,6 +205,7 @@ export class RealtimeGateway implements OnGatewayConnection, OnGatewayDisconnect
     @MessageBody() body: SubmitMoveDto & SubscribePayload,
     @ConnectedSocket() client: Socket,
   ) {
+    await this.awaitHandshake(client);
     const userId = this.userId(client);
     if (!body?.matchId) return { ok: false, error: 'matchId is required' };
     try {
@@ -191,6 +222,7 @@ export class RealtimeGateway implements OnGatewayConnection, OnGatewayDisconnect
 
   @SubscribeMessage('match:resign')
   async onResign(@MessageBody() body: SubscribePayload, @ConnectedSocket() client: Socket) {
+    await this.awaitHandshake(client);
     const userId = this.userId(client);
     if (!body?.matchId) return { ok: false, error: 'matchId is required' };
     try {
@@ -213,6 +245,7 @@ export class RealtimeGateway implements OnGatewayConnection, OnGatewayDisconnect
 
   @SubscribeMessage('match:rematch')
   async onRematch(@MessageBody() body: SubscribePayload, @ConnectedSocket() client: Socket) {
+    await this.awaitHandshake(client);
     const userId = this.userId(client);
     if (!body?.matchId) return { ok: false, error: 'matchId is required' };
     try {
