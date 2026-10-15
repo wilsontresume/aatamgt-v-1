@@ -1,0 +1,97 @@
+[gd_scene load_steps=2 format=3]
+
+[ext_resource type="Script" path="res://src/ui/screens/friend_challenge.gd" id="1_fc"]
+[ext_resource type="PackedScene" path="res://scenes/components/top_bar.tscn" id="2_tb"]
+
+[node name="FriendChallenge" type="Control"]
+anchor_right = 1.0
+anchor_bottom = 1.0
+grow_horizontal = 2
+grow_vertical = 2
+script = ExtResource("1_fc")
+
+[node name="Margin" type="MarginContainer" parent="."]
+anchor_right = 1.0
+anchor_bottom = 1.0
+grow_horizontal = 2
+grow_vertical = 2
+theme_override_constants/margin_left = 24
+theme_override_constants/margin_top = 20
+theme_override_constants/margin_right = 24
+theme_override_constants/margin_bottom = 24
+
+[node name="Content" type="VBoxContainer" parent="Margin"]
+theme_override_constants/separation = 12
+
+[node name="TopBar" parent="Margin/Content" instance=ExtResource("2_tb")]
+title = "Challenge"
+show_back = true
+show_coins = false
+
+[node name="TitleLabel" type="Label" parent="Margin/Content"]
+theme_type_variation = "Heading"
+text = "Challenge a Friend"
+
+[node name="GameLabel" type="Label" parent="Margin/Content"]
+theme_type_variation = "Caption"
+text = "Game"
+
+[node name="TierLabel" type="Label" parent="Margin/Content"]
+theme_type_variation = "Caption"
+text = "Stake tier: free"
+
+[node name="FriendsLabel" type="Label" parent="Margin/Content"]
+theme_type_variation = "Caption"
+text = "From your friends"
+
+[node name="FriendsRow" type="HBoxContainer" parent="Margin/Content"]
+theme_override_constants/separation = 8
+
+[node name="FriendsOption" type="OptionButton" parent="Margin/Content/FriendsRow"]
+layout_mode = 2
+size_flags_horizontal = 3
+
+[node name="OrLabel" type="Label" parent="Margin/Content"]
+theme_type_variation = "Caption"
+text = "or look up a player ID"
+
+[node name="UsernameRow" type="HBoxContainer" parent="Margin/Content"]
+theme_override_constants/separation = 8
+
+[node name="UsernameField" type="LineEdit" parent="Margin/Content/UsernameRow"]
+layout_mode = 2
+size_flags_horizontal = 3
+placeholder_text = "Username"
+
+[node name="LookupButton" type="Button" parent="Margin/Content/UsernameRow"]
+layout_mode = 2
+text = "Find"
+
+[node name="LookupResult" type="Label" parent="Margin/Content"]
+theme_type_variation = "Caption"
+text = ""
+
+[node name="SendButton" type="Button" parent="Margin/Content"]
+text = "Send Challenge"
+
+[node name="StatusLabel" type="Label" parent="Margin/Content"]
+theme_type_variation = "Caption"
+text = ""
+
+[node name="CodePanel" type="PanelContainer" parent="Margin/Content"]
+visible = false
+layout_mode = 2
+
+[node name="CodeVBox" type="VBoxContainer" parent="Margin/Content/CodePanel"]
+layout_mode = 2
+
+[node name="CodeLabel" type="Label" parent="Margin/Content/CodePanel/CodeVBox"]
+layout_mode = 2
+text = "Share this code:"
+
+[node name="ShareButton" type="Button" parent="Margin/Content/CodePanel/CodeVBox"]
+layout_mode = 2
+text = "Copy invite text"
+
+[node name="Spacer" type="Control" parent="Margin/Content"]
+size_flags_vertical = 3

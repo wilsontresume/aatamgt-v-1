@@ -144,6 +144,7 @@ function makeAds(provider: string, nodeEnv: string): {
     {} as never, // notifications
     { get: jest.fn() } as never, // verifier registry
     {} as never, // systemConfig
+    { record: jest.fn().mockResolvedValue(undefined) } as never, // analytics
     config as never,
   );
   return { service, prisma };

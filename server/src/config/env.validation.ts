@@ -52,7 +52,18 @@ export class EnvironmentVariables {
 
   @IsOptional()
   @IsInt()
+  @Min(0)
   MATCH_DISCONNECT_GRACE_MS: number;
+
+  @IsOptional()
+  @IsInt()
+  @Min(500)
+  MATCHMAKING_TIMEOUT_MS: number;
+
+  @IsOptional()
+  @IsInt()
+  @Min(0)
+  MATCHMAKING_AI_MOVE_DELAY_MS: number;
 
   @IsOptional()
   @IsInt()
@@ -189,6 +200,8 @@ export function validate(config: Record<string, unknown>): EnvironmentVariables 
     AUTH_THROTTLE_LIMIT: toNumber(config.AUTH_THROTTLE_LIMIT, 10),
     MATCH_TURN_TIMEOUT_MS: toNumber(config.MATCH_TURN_TIMEOUT_MS, 60_000),
     MATCH_DISCONNECT_GRACE_MS: toNumber(config.MATCH_DISCONNECT_GRACE_MS, 30_000),
+    MATCHMAKING_TIMEOUT_MS: toNumber(config.MATCHMAKING_TIMEOUT_MS, 8_000),
+    MATCHMAKING_AI_MOVE_DELAY_MS: toNumber(config.MATCHMAKING_AI_MOVE_DELAY_MS, 1_200),
     COINS_REGISTRATION_BONUS: toNumber(config.COINS_REGISTRATION_BONUS, 1000),
     COINS_DAILY_LOGIN_BONUS: toNumber(config.COINS_DAILY_LOGIN_BONUS, 100),
     COINS_REWARDED_AD_BONUS: toNumber(config.COINS_REWARDED_AD_BONUS, 500),

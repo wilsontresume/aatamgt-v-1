@@ -28,10 +28,18 @@ const LAYOUT := {
 	34: Vector2(0.073, 0.959), 35: Vector2(0.499, 0.959), 36: Vector2(0.928, 0.959),
 }
 
-const R_DOT := 4.0
-const R_PIECE := 11.0
+const R_DOT := 5.0
+const R_PIECE := 12.0
 const R_TARGET := 12.0
 const R_SELECT := 15.0
+
+# --- Piece inks ----------------------------------------------------------
+# Lacquered soldier discs: the army hues stay gameplay-legible, each
+# carrying a small gold/bone chevron — the mark of a soldier's rank.
+const RED_DISC := Color("e5484d")
+const RED_CHEVRON := Color("ffd9a0")
+const GREEN_DISC := Color("46a758")
+const GREEN_CHEVRON := Color("eaf5d8")
 
 var state: SolahSeediGameState = null
 var selection: int = -1
@@ -43,6 +51,16 @@ var path_points: Array[int] = []
 ## ({} = classic surface).
 var skin := {}
 
+# --- Animation state (visual only, never blocks input) --------------------
+var _pulse_t := 0.0
+var _move_anim_t := 0.0
+var _move_from := -1
+var _move_to := -1
+var _move_is_red := false
+var _flash_t := 0.0
+var _flash_point := -1
+var _prev_board: Array[int] = []
+
 
 func set_skin(palette: Dictionary) -> void:
 	skin = palette if palette != null else {}
@@ -51,10 +69,63 @@ func set_skin(palette: Dictionary) -> void:
 
 func configure(p_state: SolahSeediGameState, p_selection: int,
 		p_targets: Array[int], p_path: Array[int]) -> void:
+	_detect_move(p_state)
 	state = p_state
 	selection = p_selection
 	target_points = p_targets
 	path_points = p_path
+	queue_redraw()
+
+
+## Diff the previous board against the new one to find a single piece
+## that left one point and arrived at another — the mover to animate.
+func _detect_move(p_state: SolahSeediGameState) -> void:
+	if p_state == null or _prev_board.size() != SolahSeediGameState.POINT_COUNT:
+		_prev_board = p_state.board.duplicate() if p_state != null else []
+		return
+	var from := -1
+	var to := -1
+	var moves := 0
+	for i in SolahSeediGameState.POINT_COUNT:
+		var was: int = _prev_board[i]
+		var now: int = p_state.board[i]
+		if was != now:
+			moves += 1
+			if was != 0 and now == 0 and from < 0:
+				from = i
+			if was == 0 and now != 0 and to < 0:
+				to = i
+	if moves == 2 and from >= 0 and to >= 0:
+		_move_from = from
+		_move_to = to
+		_move_is_red = p_state.board[to] == SolahSeediGameState.Cell.RED
+		_move_anim_t = 1.0
+		set_process(true)
+	_prev_board = p_state.board.duplicate()
+
+
+## Red flash ring on an illegal tap. Purely visual.
+func flash_invalid(point: int) -> void:
+	if point < 0:
+		return
+	_flash_point = point
+	_flash_t = 1.0
+	set_process(true)
+
+
+func _process(delta: float) -> void:
+	var animating := false
+	_pulse_t = fmod(_pulse_t + delta * 2.2, 1.0)
+	if _move_anim_t > 0.0:
+		_move_anim_t = maxf(_move_anim_t - delta * 3.2, 0.0)
+		animating = true
+	if _flash_t > 0.0:
+		_flash_t = maxf(_flash_t - delta * 2.5, 0.0)
+		animating = true
+	if selection >= 0 or not target_points.is_empty() or path_points.size() >= 2:
+		animating = true
+	if not animating:
+		set_process(false)
 	queue_redraw()
 
 
@@ -85,7 +156,9 @@ func _draw() -> void:
 		_draw_point(point)
 	_draw_route()
 	_draw_targets()
+	_draw_move_ghost()
 	_draw_selection()
+	_draw_flash()
 
 
 # --- Geometry -----------------------------------------------------------
@@ -117,34 +190,41 @@ func _hit_radius() -> float:
 # --- Painting -----------------------------------------------------------
 
 func _draw_panel() -> void:
-	var panel := StyleBoxFlat.new()
-	panel.bg_color = skin.get("bg", AppTheme.C_SURFACE)
-	panel.set_corner_radius_all(int(AppTheme.R_CARD))
-	panel.set_border_width_all(1)
-	panel.border_color = skin.get("line", AppTheme.C_BORDER)
-	draw_style_box(panel, Rect2(Vector2.ZERO, size))
+	BoardArt.panel(self, skin)
 
 
 func _draw_lines() -> void:
-	var line_color: Color = skin.get("line", AppTheme.C_BORDER)
+	var line_color: Color = skin.get("line", AppTheme.C_BOARD_LINE)
 	for line in SolahSeediRules.LINES:
 		var points := PackedVector2Array()
 		for point in line:
 			points.append(_screen_pos(int(point)))
-		draw_polyline(points, line_color, 2.0, true)
+		BoardArt.groove_polyline(self, points, line_color, 2.0)
 
 
 func _draw_point(point: int) -> void:
 	var at := _screen_pos(point)
 	if state == null or state.is_empty(point):
-		draw_circle(at, R_DOT, AppTheme.C_TEXT_SECONDARY)
+		BoardArt.socket(self, at, R_DOT + 1.0, skin)
 		return
 	if state.cell(point) == SolahSeediGameState.Cell.RED:
-		draw_circle(at, R_PIECE, AppTheme.C_DANGER)
-		draw_circle(at, R_PIECE - 4.0, AppTheme.C_DANGER.darkened(0.35))
+		_draw_soldier(at, RED_DISC, RED_CHEVRON)
 	else:
-		draw_circle(at, R_PIECE, AppTheme.C_SUCCESS)
-		draw_circle(at, R_PIECE - 4.0, AppTheme.C_SUCCESS.darkened(0.35))
+		_draw_soldier(at, GREEN_DISC, GREEN_CHEVRON)
+
+
+## A soldier's marker: lacquer disc + upward chevron insignia.
+func _draw_soldier(at: Vector2, disc_color: Color, ink: Color) -> void:
+	BoardArt.disc(self, at, R_PIECE, disc_color)
+	var r := R_PIECE * 0.86
+	BoardArt.stripe(self, at, r, Vector2(-0.42, 0.10), Vector2(0.0, -0.30),
+			ink, 0.16)
+	BoardArt.stripe(self, at, r, Vector2(0.0, -0.30), Vector2(0.42, 0.10),
+			ink, 0.16)
+	BoardArt.stripe(self, at, r, Vector2(-0.26, 0.32), Vector2(0.0, -0.04),
+			ink.darkened(0.2), 0.12)
+	BoardArt.stripe(self, at, r, Vector2(0.0, -0.04), Vector2(0.26, 0.32),
+			ink.darkened(0.2), 0.12)
 
 
 func _draw_route() -> void:
@@ -161,12 +241,30 @@ func _draw_route() -> void:
 
 func _draw_targets() -> void:
 	for point in target_points:
-		draw_arc(_screen_pos(point), R_TARGET, 0.0, TAU, 32,
-				AppTheme.C_ACCENT, 3.0, true)
+		BoardArt.move_glow(self, _screen_pos(point), R_TARGET, _pulse_t)
+
+
+func _draw_move_ghost() -> void:
+	if _move_anim_t <= 0.0 or _move_from < 0 or _move_to < 0 or state == null:
+		return
+	var t := 1.0 - _move_anim_t
+	var eased := t * t * (3.0 - 2.0 * t)
+	var from := _screen_pos(_move_from)
+	var to := _screen_pos(_move_to)
+	var at := from.lerp(to, eased)
+	if _move_is_red:
+		_draw_soldier(at, RED_DISC, RED_CHEVRON)
+	else:
+		_draw_soldier(at, GREEN_DISC, GREEN_CHEVRON)
+
+
+func _draw_flash() -> void:
+	if _flash_t <= 0.0 or _flash_point < 0:
+		return
+	BoardArt.flash_ring(self, _screen_pos(_flash_point), R_SELECT, _flash_t)
 
 
 func _draw_selection() -> void:
 	if selection < 0:
 		return
-	draw_arc(_screen_pos(selection), R_SELECT, 0.0, TAU, 36,
-			AppTheme.C_TEXT, 3.0, true)
+	BoardArt.pulse_ring(self, _screen_pos(selection), R_SELECT, _pulse_t)

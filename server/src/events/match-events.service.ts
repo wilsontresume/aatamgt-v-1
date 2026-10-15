@@ -6,7 +6,8 @@ export interface MatchMoveEvent {
   matchId: string;
   seq: number;
   stateVersion: number;
-  userId: string;
+  /** Human actor, or null for a server-driven AI seat. */
+  userId: string | null;
   payload: unknown;
   at: string;
   /** Engine game: canonical notation of the accepted move. */

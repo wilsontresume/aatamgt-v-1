@@ -144,7 +144,7 @@ func _test_open_shop_from_menu() -> void:
 	_check(menu != null, "main menu is on screen")
 	if menu == null:
 		return
-	var button: Button = menu.get_node_or_null("Margin/Content/ShopButton")
+	var button: Button = menu.get_node_or_null("Margin/Content/FeaturesRow/ShopButton")
 	_check(button != null, "main menu has a Shop button")
 	if button == null:
 		return

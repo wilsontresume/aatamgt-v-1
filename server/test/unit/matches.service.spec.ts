@@ -74,6 +74,9 @@ function makeMatches(
       updateMany: jest.fn().mockResolvedValue({}),
       update: jest.fn().mockResolvedValue({}),
     },
+    analyticsEvent: {
+      count: jest.fn().mockResolvedValue(0),
+    },
     $transaction: jest.fn(async (fn: (tx: unknown) => Promise<unknown>) => fn(prisma)),
   };
   const games = { getByKey: jest.fn().mockResolvedValue(game) };
@@ -92,6 +95,18 @@ function makeMatches(
     }),
   };
   const rankings = { applyMatchResult: jest.fn().mockResolvedValue([]) };
+  const wallet = {
+    getBalance: jest.fn().mockResolvedValue({ balance: 1000 }),
+    credit: jest.fn().mockResolvedValue({}),
+    debit: jest.fn().mockResolvedValue({}),
+  };
+  const tiers = {
+    byId: jest.fn().mockResolvedValue(null),
+    requireActiveForGame: jest.fn().mockImplementation(async () => {
+      const { BadRequestException } = await import('@nestjs/common');
+      throw new BadRequestException('Unknown or inactive tier');
+    }),
+  };
   prisma.$queryRaw = jest.fn().mockResolvedValue([]);
   const service = new MatchesService(
     prisma as never,
@@ -99,17 +114,44 @@ function makeMatches(
     events as never,
     clock as never,
     rankings as never,
+    { record: jest.fn().mockResolvedValue(undefined) } as never,
+    wallet as never,
+    tiers as never,
     config as never,
   );
-  return { service, prisma, games, events, clock, rankings, config };
+  return { service, prisma, games, events, clock, rankings, config, wallet, tiers };
 }
 
 describe('MatchesService', () => {
-  it('refuses to create a match with a stake while gameplay is unimplemented', async () => {
+  it('creates a staked pending match using the DB tier cost (server-authoritative)', async () => {
+    const { service, prisma, tiers } = makeMatches({});
+    tiers.requireActiveForGame.mockResolvedValue({
+      id: 'bronze',
+      costCoins: 50,
+      rewardMultiplierBp: 12_500,
+    });
+    const match = await service.create('u1', {
+      gameKey: 'aadu-puli-aattam',
+      stakeCoins: 999, // client-forged amount — must be ignored
+      tierId: 'bronze',
+    });
+    expect(match.status).toBe('PENDING');
+    expect(prisma.gameMatch.create).toHaveBeenCalledWith(
+      expect.objectContaining({
+        data: expect.objectContaining({
+          stakeCoins: 50,
+          tierId: 'bronze',
+          players: { create: { userId: 'u1', seat: 0 } },
+        }),
+      }),
+    );
+  });
+
+  it('rejects a create() with a disabled tier', async () => {
     const { service } = makeMatches({});
     await expect(
-      service.create('u1', { gameKey: 'aadu-puli-aattam', stakeCoins: 100 }),
-    ).rejects.toBeInstanceOf(ConflictException);
+      service.create('u1', { gameKey: 'aadu-puli-aattam', tierId: 'ghost' }),
+    ).rejects.toThrow('Unknown or inactive tier');
   });
 
   it('creates a pending match with the creator in seat 0', async () => {

@@ -1,6 +1,7 @@
 extends Control
 ## Splash screen: initializes App, restores a stored session within a
-## bounded deadline, then hands off to the main menu.
+## bounded deadline, then hands off to the login screen or — only when
+## a valid session exists — straight to the home menu.
 
 const MIN_SPLASH_SECONDS := 1.4
 const RESTORE_DEADLINE_SECONDS := 3.0
@@ -13,10 +14,21 @@ func _ready() -> void:
 	if not is_inside_tree():
 		return
 	if App.auth.has_stored_session():
+		if OS.is_debug_build():
+			print("UI: splash restoring stored session")
 		await _restore_bounded()
+		if OS.is_debug_build():
+			print("UI: splash restore finished (authenticated=%s)" %
+					App.auth.is_authenticated())
 	if not is_inside_tree():
 		return
-	App.navigation.go(&"main_menu")
+	# Login-first flow: home only after a real (restored) session. A
+	# fresh install or an expired session lands on the welcome screen
+	# with no back target (Back exits the app).
+	if App.auth.is_authenticated():
+		App.navigation.go(&"main_menu")
+	else:
+		App.navigation.go_no_back(&"auth")
 
 
 ## Restores the previous session but never blocks the menu for longer

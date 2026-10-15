@@ -16,6 +16,7 @@ import { MatchesService, SubmitMoveDto } from '../matches/matches.service';
 import { sideKeyForSeat } from '../matches/engine-adapters';
 import { MatchClockService } from '../matches/match-clock.service';
 import { PrismaService } from '../prisma/prisma.service';
+import { UserPresenceService } from './user-presence.service';
 import { AccessTokenPayload } from '../auth/auth.service';
 import { AppConfig } from '../config/configuration';
 
@@ -44,7 +45,7 @@ export class RealtimeGateway implements OnGatewayConnection, OnGatewayDisconnect
   private readonly cfg: AppConfig;
 
   /** matchId → userId → socket ids (a participant may hold several). */
-  private readonly presence = new Map<string, Map<string, Set<string>>>();
+  private readonly matchPresence = new Map<string, Map<string, Set<string>>>();
   /** socketId → its current match subscription. */
   private readonly socketSub = new Map<string, { matchId: string; userId: string }>();
 
@@ -55,6 +56,7 @@ export class RealtimeGateway implements OnGatewayConnection, OnGatewayDisconnect
     private readonly events: MatchEventsService,
     private readonly clock: MatchClockService,
     private readonly prisma: PrismaService,
+    private readonly presence: UserPresenceService,
   ) {
     this.cfg = config.get<AppConfig>('app') as AppConfig;
     this.events.events$.subscribe((event) => this.broadcast(event));
@@ -97,6 +99,7 @@ export class RealtimeGateway implements OnGatewayConnection, OnGatewayDisconnect
       }
       client.data.userId = payload.sub;
       client.data.username = user.username;
+      this.presence.add(payload.sub, client.id);
       client.emit('connected', { userId: payload.sub, username: user.username });
     } catch {
       this.reject(client, 'invalid token');
@@ -111,6 +114,8 @@ export class RealtimeGateway implements OnGatewayConnection, OnGatewayDisconnect
 
   handleDisconnect(client: Socket): void {
     this.logger.debug(`socket disconnected ${client.id}`);
+    const uid = client.data.userId as string | undefined;
+    if (uid) this.presence.remove(uid, client.id);
     const sub = this.socketSub.get(client.id);
     if (!sub) return;
     this.socketSub.delete(client.id);
@@ -186,9 +191,11 @@ export class RealtimeGateway implements OnGatewayConnection, OnGatewayDisconnect
       serverState: match.serverState,
       players: match.players.map((p) => ({
         userId: p.userId,
-        username: p.user.username,
+        username: p.isAi ? (p.aiName ?? 'AI') : (p.user?.username ?? ''),
         seat: p.seat,
         result: p.result,
+        isAi: p.isAi,
+        aiName: p.aiName,
       })),
       moves: match.moves.map((m) => ({
         seq: m.seq,
@@ -303,10 +310,10 @@ export class RealtimeGateway implements OnGatewayConnection, OnGatewayDisconnect
   // --- presence ----------------------------------------------------------
 
   private addPresence(matchId: string, userId: string, socketId: string): boolean {
-    let byUser = this.presence.get(matchId);
+    let byUser = this.matchPresence.get(matchId);
     if (!byUser) {
       byUser = new Map();
-      this.presence.set(matchId, byUser);
+      this.matchPresence.set(matchId, byUser);
     }
     let sockets = byUser.get(userId);
     if (!sockets) {
@@ -319,24 +326,24 @@ export class RealtimeGateway implements OnGatewayConnection, OnGatewayDisconnect
   }
 
   private removePresence(matchId: string, userId: string, socketId: string): boolean {
-    const byUser = this.presence.get(matchId);
+    const byUser = this.matchPresence.get(matchId);
     const sockets = byUser?.get(userId);
     if (!sockets || !sockets.delete(socketId)) return false;
     if (sockets.size === 0) {
       byUser?.delete(userId);
-      if (byUser && byUser.size === 0) this.presence.delete(matchId);
+      if (byUser && byUser.size === 0) this.matchPresence.delete(matchId);
       return true;
     }
     return false;
   }
 
   private hasPresence(matchId: string, userId: string): boolean {
-    return (this.presence.get(matchId)?.get(userId)?.size ?? 0) > 0;
+    return (this.matchPresence.get(matchId)?.get(userId)?.size ?? 0) > 0;
   }
 
   private presenceFor(matchId: string): Record<string, boolean> {
     const out: Record<string, boolean> = {};
-    for (const [userId, sockets] of this.presence.get(matchId) ?? []) {
+    for (const [userId, sockets] of this.matchPresence.get(matchId) ?? []) {
       out[userId] = sockets.size > 0;
     }
     return out;

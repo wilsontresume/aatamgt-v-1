@@ -43,6 +43,24 @@ var shop: ShopService
 ## Phase 15: staff dashboard API (role-guarded admin endpoints).
 var admin: AdminService
 
+## Phase 16: privacy-conscious product analytics (opt-out, no PII).
+var analytics: AnalyticsService
+
+## Menu redesign: daily login rewards (server-owned streaks/claims).
+var rewards: RewardsService
+
+## Workflow Change 2: multiplayer-first entry (tiers, queue, AI fallback).
+var matchmaking: MatchmakingService
+
+## Currently highlighted game on the main-menu carousel. The PLAY
+## button opens this game's multiplayer-first entry screen.
+signal selected_game_changed(game_id: StringName)
+var selected_game: StringName = &"aadu_puli"
+
+const SELECTED_GAME_SETTING := "menu"
+const SELECTED_GAME_KEY := "selected_game"
+const VALID_GAMES: Array[StringName] = [&"aadu_puli", &"solah_seedi", &"nine_mens_morris"]
+
 var _bootstrapped := false
 
 
@@ -62,6 +80,14 @@ func _init() -> void:
 	rankings = RankingService.new(auth, api_client)
 	shop = ShopService.new(api_client, auth, coins)
 	admin = AdminService.new(auth)
+	analytics = AnalyticsService.new(api_client, auth,
+			get_local_setting, save_local_setting, APP_VERSION)
+	rewards = RewardsService.new(auth)
+	matchmaking = MatchmakingService.new(auth)
+	var saved_game := str(get_local_setting(SELECTED_GAME_SETTING,
+			SELECTED_GAME_KEY, String(selected_game)))
+	if VALID_GAMES.has(StringName(saved_game)):
+		selected_game = StringName(saved_game)
 
 
 func _ready() -> void:
@@ -74,6 +100,23 @@ func _ready() -> void:
 	auth.signed_out.connect(_on_signed_out)
 	api_client.reachability_changed.connect(_on_reachability)
 	ads.reward_granted.connect(_on_reward_granted)
+
+
+func _notification(what: int) -> void:
+	# Session duration + queued events on quit / backgrounding. The
+	# flush is async, so a desktop quit is held briefly to let the
+	# final batch leave the machine; backgrounding on mobile already
+	# keeps the process alive for it.
+	if what == NOTIFICATION_WM_CLOSE_REQUEST:
+		get_tree().auto_accept_quit = false
+		analytics.end_session()
+		get_tree().create_timer(0.5).timeout.connect(_quit_after_flush)
+	elif what == NOTIFICATION_APPLICATION_PAUSED:
+		analytics.end_session()
+
+
+func _quit_after_flush() -> void:
+	get_tree().quit()
 
 
 ## (Re)points the API client at the configured backend. Returns false
@@ -93,11 +136,23 @@ func bootstrap() -> void:
 	user.initialize_local_placeholder()
 	network.set_offline()
 	_apply_audio_settings()
+	analytics.start_session()  # install/first-launch/session metrics
 	bootstrap_completed.emit()
 
 
 func is_bootstrapped() -> bool:
 	return _bootstrapped
+
+
+## Highlights a playable game on the main-menu carousel. Only the three
+## implemented titles are accepted; the choice persists locally so the
+## next launch opens on the same card.
+func select_game(game_id: StringName) -> void:
+	if not VALID_GAMES.has(game_id) or game_id == selected_game:
+		return
+	selected_game = game_id
+	save_local_setting(SELECTED_GAME_SETTING, SELECTED_GAME_KEY, String(game_id))
+	selected_game_changed.emit(game_id)
 
 
 # --- Local (device-only) settings ----------------------------------------
@@ -144,6 +199,7 @@ func _on_session_changed(session_user: Dictionary) -> void:
 	refresh_wallet()  # fire-and-forget: login screens don't block on it
 	ads.refresh_config()  # fire-and-forget: server-driven ad config
 	cosmetics.refresh()  # fire-and-forget: inventory for the new session
+	analytics.on_session_changed(session_user)  # guest-conversion + flush
 
 
 func _on_signed_out() -> void:
@@ -162,5 +218,6 @@ func _on_reward_granted(_tier: String, _coins: int) -> void:
 func _on_reachability(reachable: bool) -> void:
 	if reachable:
 		network.set_online()
+		analytics.flush()  # retry any events queued while offline
 	else:
 		network.set_offline()

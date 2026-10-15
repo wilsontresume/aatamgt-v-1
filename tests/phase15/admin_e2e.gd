@@ -130,7 +130,7 @@ func _test_open_dashboard() -> void:
 	_check(menu != null, "main menu is on screen")
 	if menu == null:
 		return
-	var button: Button = menu.get_node_or_null("Margin/Content/AdminButton")
+	var button: Button = menu.get_node_or_null("Margin/Content/FeaturesRow/AdminButton")
 	_check(button != null, "main menu has an Admin button")
 	if button == null:
 		return
@@ -570,7 +570,7 @@ func _test_staff_gating() -> void:
 	_check(menu != null, "main menu returns")
 	if menu != null:
 		var button: Button = menu.get_node_or_null(
-				"Margin/Content/AdminButton")
+				"Margin/Content/FeaturesRow/AdminButton")
 		_check(button != null, "Admin button still exists")
 		_check(button != null and not button.visible,
 				"Admin button hides for regular players")

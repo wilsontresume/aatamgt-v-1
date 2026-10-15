@@ -1,10 +1,13 @@
-[gd_scene load_steps=5 format=3]
+[gd_scene load_steps=8 format=3]
 
 [ext_resource type="Script" path="res://src/ui/screens/nine_mens_morris.gd" id="1_nm"]
 [ext_resource type="PackedScene" path="res://scenes/components/top_bar.tscn" id="2_tb"]
 [ext_resource type="PackedScene" path="res://scenes/components/button.tscn" id="3_btn"]
 [ext_resource type="Script" path="res://src/ui/games/morris_board.gd" id="4_bd"]
 [ext_resource type="Script" path="res://src/ui/components/ui_spinner.gd" id="5_sp"]
+[ext_resource type="Script" path="res://src/ui/components/match_player_card.gd" id="6_pc"]
+[ext_resource type="Script" path="res://src/ui/components/match_turn_badge.gd" id="7_tb"]
+[ext_resource type="Script" path="res://src/ui/components/match_hand_panel.gd" id="8_hp"]
 
 [node name="NineMensMorrisScreen" type="Control"]
 anchor_right = 1.0
@@ -30,6 +33,27 @@ theme_override_constants/separation = 12
 title = "Nine Men's Morris"
 show_back = true
 show_coins = false
+
+[node name="SubtitleLabel" type="Label" parent="Margin/Content"]
+theme_type_variation = "BoardSubtitle"
+text = "Place • Move • Form Mills • Capture"
+
+[node name="PlayersRow" type="HBoxContainer" parent="Margin/Content"]
+theme_override_constants/separation = 10
+
+[node name="YouPanel" type="PanelContainer" parent="Margin/Content/PlayersRow"]
+script = ExtResource("6_pc")
+size_flags_horizontal = 3
+size_flags_vertical = 4
+
+[node name="TurnPanel" type="PanelContainer" parent="Margin/Content/PlayersRow"]
+script = ExtResource("7_tb")
+size_flags_vertical = 4
+
+[node name="OppPanel" type="PanelContainer" parent="Margin/Content/PlayersRow"]
+script = ExtResource("6_pc")
+size_flags_horizontal = 3
+size_flags_vertical = 4
 
 [node name="ModeRow" type="HBoxContainer" parent="Margin/Content"]
 theme_override_constants/separation = 8
@@ -139,17 +163,39 @@ toggle_mode = true
 size_flags_horizontal = 3
 
 [node name="StatusLabel" type="Label" parent="Margin/Content"]
-theme_type_variation = "Heading"
+theme_type_variation = "StatusStrip"
 text = "Red to move — place a piece"
 
 [node name="DetailLabel" type="Label" parent="Margin/Content"]
-theme_type_variation = "Caption"
+theme_type_variation = "DetailStrip"
 text = "Red 0 · Green 0  ·  Hand 9 · 9  ·  Move 1  ·  Quiet 0/50"
 
 [node name="Board" type="Control" parent="Margin/Content"]
 custom_minimum_size = Vector2(0, 360)
 size_flags_vertical = 3
 script = ExtResource("4_bd")
+
+[node name="HandRow" type="HBoxContainer" parent="Margin/Content"]
+theme_override_constants/separation = 10
+
+[node name="YouHandPanel" type="PanelContainer" parent="Margin/Content/HandRow"]
+script = ExtResource("8_hp")
+size_flags_horizontal = 3
+size_flags_vertical = 4
+
+[node name="InstrPanel" type="PanelContainer" parent="Margin/Content/HandRow"]
+size_flags_horizontal = 3
+size_flags_vertical = 4
+
+[node name="InstrLabel" type="Label" parent="Margin/Content/HandRow/InstrPanel"]
+theme_type_variation = "SideName"
+text = "Your Move"
+horizontal_alignment = 1
+
+[node name="OppHandPanel" type="PanelContainer" parent="Margin/Content/HandRow"]
+script = ExtResource("8_hp")
+size_flags_horizontal = 3
+size_flags_vertical = 4
 
 [node name="Controls" type="HBoxContainer" parent="Margin/Content"]
 theme_override_constants/separation = 12
@@ -178,3 +224,7 @@ size_flags_horizontal = 3
 size_flags_vertical = 4
 text = "Place a piece on any open point"
 horizontal_alignment = 2
+
+[node name="RulesButton" parent="Margin/Content/Controls" instance=ExtResource("3_btn")]
+variant = 2
+text = "Rules"

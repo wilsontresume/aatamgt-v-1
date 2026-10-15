@@ -84,6 +84,7 @@ function makeAuth(
     config as never,
     wallet as never,
     { number: jest.fn().mockResolvedValue(1000) } as never,
+    { record: jest.fn().mockResolvedValue(undefined) } as never,
   );
   return { service, prisma, jwt, user, wallet };
 }

@@ -47,6 +47,9 @@ var presence: Dictionary = {}   # userId -> bool
 var last_notation := ""
 var connected := false
 var reconnecting := false
+## Seats' identities from the subscribe ack: [{userId, username, seat,
+## result, isAi, aiName}]. The screen reads these for opponent names.
+var players: Array = []
 
 var _wants_connection := false
 var _opening := false
@@ -55,6 +58,10 @@ var _announced_match := ""      # match ids whose completion was emitted
 ## this in _ready() and enters online mode by itself (the accepted
 ## match is already waiting on the server).
 var auto_enter_online := false
+## Workflow 2: match created by matchmaking/challenge hand-off. When
+## set, the game screen subscribes to this exact id instead of scanning
+## for a resumable match. One-shot: cleared on consume.
+var auto_match_id := ""
 
 
 func _init(p_api: ApiClient = null, p_auth: AuthService = null) -> void:
@@ -75,14 +82,22 @@ func set_game_key(key: String) -> void:
 
 ## Phase 11: the game screen should boot straight into online mode
 ## (challenge accepted / rematch pending). One-shot: consumed on read.
-func request_auto_online() -> void:
+func request_auto_online(match_id: String = "") -> void:
 	auto_enter_online = true
+	auto_match_id = match_id
 
 
 func consume_auto_online() -> bool:
 	var wanted := auto_enter_online
 	auto_enter_online = false
 	return wanted
+
+
+## One-shot: the exact match id to resume, if the hand-off supplied one.
+func take_auto_match_id() -> String:
+	var id := auto_match_id
+	auto_match_id = ""
+	return id
 
 
 func _enter_tree() -> void:
@@ -125,6 +140,28 @@ func turn_seconds_left() -> int:
 	if turn_deadline <= 0.0:
 		return 0
 	return maxi(0, int(ceil(turn_deadline - Time.get_unix_time_from_system())))
+
+
+## Display name of the opponent seat (1 - mine), as sent by the server
+## on subscribe. AI seats report their aiName (Guest + 5 chars). Empty
+## string when the roster has not arrived yet.
+func opponent_username() -> String:
+	for entry in players:
+		if not entry is Dictionary:
+			continue
+		if int(entry.get("seat", -1)) == 1 - seat:
+			return str(entry.get("username", entry.get("aiName", "")))
+	return ""
+
+
+## True when the opponent seat is a server-side AI fallback.
+func opponent_is_ai() -> bool:
+	for entry in players:
+		if not entry is Dictionary:
+			continue
+		if int(entry.get("seat", -1)) == 1 - seat:
+			return bool(entry.get("isAi", false))
+	return false
 
 
 ## Opens the authenticated WebSocket and waits for the handshake.
@@ -249,6 +286,8 @@ func subscribe_match(target_id: String) -> Dictionary:
 	var snap_presence: Variant = ack.get("presence", {})
 	presence = (snap_presence as Dictionary).duplicate() if \
 			snap_presence is Dictionary else {}
+	var snap_players: Variant = ack.get("players", [])
+	players = (snap_players as Array).duplicate() if snap_players is Array else []
 	match_changed.emit()
 	state_applied.emit()
 	return {"ok": true, "seat": seat, "side": side, "status": match_status,
@@ -507,6 +546,7 @@ func _clear_match() -> void:
 	turn_deadline = 0.0
 	completion = {}
 	presence = {}
+	players = []
 	last_notation = ""
 
 

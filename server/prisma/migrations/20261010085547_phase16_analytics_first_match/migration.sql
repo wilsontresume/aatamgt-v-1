@@ -1,0 +1,2 @@
+-- AlterTable
+ALTER TABLE `AnalyticsEvent` MODIFY `type` ENUM('install', 'first_launch', 'registration', 'guest_conversion', 'session_start', 'session_end', 'match_completed', 'first_match', 'rematch', 'game_selected', 'ai_match_completed', 'friend_request', 'challenge_created', 'challenge_accepted', 'share', 'rewarded_ad_started', 'rewarded_ad_completed', 'interstitial_displayed', 'royal_pass_purchase', 'coin_purchase', 'cosmetic_purchase') NOT NULL;

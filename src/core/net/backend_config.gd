@@ -29,8 +29,20 @@ static func resolve_base_url() -> String:
 
 ## Optional CA bundle for TLS verification (self-signed dev backends).
 ## Empty string = trust the platform certificate store.
+##
+## On device, OS.get_environment cannot be set per-app, so debug builds
+## fall back to the bundled dev certificate (server/scripts/dev-cert.sh)
+## — the same cert desktop e2e passes via AATAMGT_CA_CERT. Release
+## builds never resolve a path here: they use the platform store only.
 static func ca_cert_path() -> String:
-	return OS.get_environment(ENV_CA_CERT).strip_edges()
+	var from_env := OS.get_environment(ENV_CA_CERT).strip_edges()
+	if not from_env.is_empty():
+		return from_env
+	if OS.is_debug_build():
+		const DEV_CERT := "res://server/dev-certs/dev-cert.pem"
+		if FileAccess.file_exists(DEV_CERT):
+			return DEV_CERT
+	return ""
 
 
 ## Returns the normalized URL (no trailing slash) when the URL satisfies

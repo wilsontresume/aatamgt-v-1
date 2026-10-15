@@ -60,6 +60,31 @@ max_value = 1.0
 step = 0.05
 value = 0.8
 
+[node name="PrivacyPanel" type="PanelContainer" parent="Margin/Content"]
+theme_type_variation = "Card"
+
+[node name="PrivacyBody" type="VBoxContainer" parent="Margin/Content/PrivacyPanel"]
+theme_override_constants/separation = 8
+
+[node name="PrivacyHeading" type="Label" parent="Margin/Content/PrivacyPanel/PrivacyBody"]
+theme_type_variation = "Heading"
+text = "Privacy"
+
+[node name="AnalyticsRow" type="HBoxContainer" parent="Margin/Content/PrivacyPanel/PrivacyBody"]
+
+[node name="AnalyticsTitle" type="Label" parent="Margin/Content/PrivacyPanel/PrivacyBody/AnalyticsRow"]
+theme_type_variation = "Body"
+text = "Share usage data"
+size_flags_horizontal = 3
+
+[node name="AnalyticsToggle" type="CheckButton" parent="Margin/Content/PrivacyPanel/PrivacyBody/AnalyticsRow"]
+text = ""
+
+[node name="AnalyticsHint" type="Label" parent="Margin/Content/PrivacyPanel/PrivacyBody"]
+theme_type_variation = "Caption"
+autowrap_mode = 3
+text = "Anonymous play statistics (sessions, matches, purchases). No email, username or device identity is collected."
+
 [node name="AccountPanel" type="PanelContainer" parent="Margin/Content"]
 theme_type_variation = "Card"
 

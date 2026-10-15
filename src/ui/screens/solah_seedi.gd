@@ -38,6 +38,7 @@ const DIFFICULTY_NAMES := ["Easy", "Medium", "Hard"]
 @onready var _vs_ai_button: Button = $Margin/Content/ModeRow/VsAiButton
 @onready var _hot_seat_button: Button = $Margin/Content/ModeRow/HotSeatButton
 @onready var _online_button: Button = $Margin/Content/ModeRow/OnlineButton
+@onready var _mode_row: Control = $Margin/Content/ModeRow
 @onready var _ai_badge: Control = $Margin/Content/ModeRow/AiBadge
 @onready var _ai_badge_label: Label = \
 		$Margin/Content/ModeRow/AiBadge/AiBadgeRow/AiBadgeLabel
@@ -55,6 +56,13 @@ const DIFFICULTY_NAMES := ["Easy", "Medium", "Hard"]
 @onready var _easy_button: Button = $Margin/Content/DifficultyRow/EasyButton
 @onready var _medium_button: Button = $Margin/Content/DifficultyRow/MediumButton
 @onready var _hard_button: Button = $Margin/Content/DifficultyRow/HardButton
+@onready var _you_card: MatchPlayerCard = $Margin/Content/PlayersRow/YouPanel
+@onready var _turn_badge: MatchTurnBadge = $Margin/Content/PlayersRow/TurnPanel
+@onready var _opp_card: MatchPlayerCard = $Margin/Content/PlayersRow/OppPanel
+@onready var _you_hand: MatchHandPanel = $Margin/Content/HandRow/YouHandPanel
+@onready var _instr_label: Label = $Margin/Content/HandRow/InstrPanel/InstrLabel
+@onready var _opp_hand: MatchHandPanel = $Margin/Content/HandRow/OppHandPanel
+@onready var _rules_button: Button = $Margin/Content/Controls/RulesButton
 
 var _state: SolahSeediGameState
 var _history: Array[String] = []
@@ -74,6 +82,8 @@ var _ai_game_seed := 0
 var _online_mode := false
 var _submitting := false
 var _announced_match_id := ""
+## Entry-flow hand-off: matchmaking / accepted challenge already seated us.
+var _entry_flow := false
 ## Phase 12: capture-count baseline for the equipped capture effect.
 var _fx_seen_captures := -1
 
@@ -106,11 +116,21 @@ func _ready() -> void:
 	for button in [_vs_ai_button, _hot_seat_button, _easy_button,
 			_medium_button, _hard_button]:
 		button.toggled.connect(_on_mode_toggled)
+	_you_card.setup(false)
+	_opp_card.setup(true)
+	_you_hand.setup(false, SolahSeediBoard.RED_DISC)
+	_opp_hand.setup(true, SolahSeediBoard.GREEN_DISC)
+	_rules_button.pressed.connect(_on_rules_pressed)
 	App.online.connection_changed.connect(_on_online_connection)
 	App.online.state_applied.connect(_on_online_state)
 	App.online.match_changed.connect(_on_online_match_changed)
 	App.online.match_completed.connect(_on_online_completed)
 	if App.online.consume_auto_online():
+		_entry_flow = true
+		if _mode_row != null:
+			_mode_row.visible = false
+		if _online_row != null:
+			_online_row.visible = false
 		_set_online_mode()
 	App.cosmetics.apply_board_skin(_board)
 	_refresh()
@@ -184,6 +204,7 @@ func _handle_tap(point: int) -> void:
 		_refresh()
 		return
 	if not _path.is_empty():
+		_board.flash_invalid(point)
 		_path = []
 		_refresh()
 
@@ -329,11 +350,15 @@ func _online_bootstrap() -> void:
 	if not _online_mode or not conn.ok:
 		_refresh()
 		return
-	var found: Dictionary = await App.online.find_resumable_match()
-	if not _online_mode:
-		return
-	var resume_id := str(found.get("match_id", ""))
-	if not resume_id.is_empty():
+	# Entry-flow hand-off (matchmaking / accepted challenge) supplies the
+	# exact match id; otherwise scan for any resumable match of this game.
+	var resume_id := App.online.take_auto_match_id()
+	if resume_id.is_empty():
+		var found: Dictionary = await App.online.find_resumable_match()
+		if not _online_mode:
+			return
+		resume_id = str(found.get("match_id", ""))
+	if not resume_id.is_empty() and _online_mode:
 		await App.online.subscribe_match(resume_id)
 		_match_field.text = App.online.match_id
 	_sync_from_online()
@@ -655,6 +680,69 @@ func _refresh() -> void:
 	_undo_button.disabled = _history.is_empty()
 	_sync_mode_controls(thinking)
 	_board.configure(_state, _selection(), _target_points(), _path)
+	_refresh_hud()
+
+
+## Player panels, turn badge and hand trays — visual only.
+func _refresh_hud() -> void:
+	if _state == null:
+		return
+	var my_name := App.auth.get_username() if App.auth != null else "You"
+	var coins := App.coins.get_balance() if App.coins != null else -1
+	var opp_name := ""
+	var red_on_board := _state.board.count(SolahSeediGameState.Cell.RED)
+	var green_on_board := _state.board.count(SolahSeediGameState.Cell.GREEN)
+	if _online_mode:
+		var my_is_red := App.online.side != "green"
+		opp_name = App.online.opponent_username()
+		if opp_name.is_empty():
+			opp_name = "Opponent"
+		_turn_badge.set_turn("Your Move" if App.online.is_my_turn() else "Their Move",
+				App.online.turn_seconds_left() if App.online.is_my_turn() else -1)
+		_you_card.set_identity(my_name, "Red" if my_is_red else "Green", true, coins)
+		_opp_card.set_identity(opp_name, "Green" if my_is_red else "Red", false)
+		var my_count := red_on_board if my_is_red else green_on_board
+		var opp_count := green_on_board if my_is_red else red_on_board
+		_you_hand.set_counts("You · Red" if my_is_red else "You · Green", -1, my_count, 16)
+		_opp_hand.set_counts(opp_name, -1, opp_count, 16)
+		_instr_label.text = "Your Move" if App.online.is_my_turn() else "Waiting…"
+	elif _ai_mode:
+		opp_name = "Guest" + _ai_guest_suffix()
+		_turn_badge.set_turn("Your Move" if _state.side_to_move == SolahSeediGameState.Side.RED
+				else "Their Move")
+		_you_card.set_identity(my_name, "Red", true, coins)
+		_opp_card.set_identity(opp_name, "Green", false)
+		_you_hand.set_counts("You · Red", -1, red_on_board, 16)
+		_opp_hand.set_counts(opp_name, -1, green_on_board, 16)
+		_instr_label.text = "Your Move" if _state.side_to_move == SolahSeediGameState.Side.RED else "Their Move"
+	else:
+		opp_name = "Player 2"
+		my_name = "Player 1"
+		_turn_badge.set_turn("Player %d's Move" % (1 if _state.side_to_move == SolahSeediGameState.Side.RED else 2))
+		_you_card.set_identity(my_name, "Red", true)
+		_opp_card.set_identity(opp_name, "Green", false)
+		_you_hand.set_counts("Red · P1", -1, red_on_board, 16)
+		_opp_hand.set_counts("Green · P2", -1, green_on_board, 16)
+		_instr_label.text = "Player %d's Move" % (1 if _state.side_to_move == SolahSeediGameState.Side.RED else 2)
+
+
+var _ai_guest := ""
+func _ai_guest_suffix() -> String:
+	if _ai_guest.is_empty():
+		var chars := "ABCDEFGHJKLMNPQRSTUVWXYZ23456789"
+		_ai_guest = ""
+		for i in 5:
+			_ai_guest += chars[randi() % chars.length()]
+	return _ai_guest
+
+
+func _on_rules_pressed() -> void:
+	App.dialog.show_error("Solah Seedi",
+			"Two armies of sixteen soldiers face each other. A soldier "
+			+ "moves one step to an adjacent empty point, or jumps over "
+			+ "an enemy soldier to the empty point beyond, capturing it. "
+			+ "Build multi-jump routes and play them with the Play button. "
+			+ "Capture every enemy soldier to win.")
 
 
 func _sync_mode_controls(thinking: bool) -> void:
@@ -676,7 +764,7 @@ func _sync_mode_controls(thinking: bool) -> void:
 	# Offline-only controls hide online; Resign/Rematch follow the match.
 	_undo_button.visible = not _online_mode
 	_restart_button.visible = not _online_mode
-	_online_row.visible = _online_mode
+	_online_row.visible = _online_mode and not _entry_flow
 	_resign_button.visible = _online_mode and App.online.is_active()
 	_rematch_button.visible = _online_mode \
 			and App.online.match_status == "COMPLETED"
@@ -874,6 +962,8 @@ func _play_victory_fx_if_won() -> void:
 
 func _announce_result() -> void:
 	_play_victory_fx_if_won()
+	if _ai_mode:
+		_track_ai_result()
 	match _state.result:
 		SolahSeediGameState.Result.RED_WIN:
 			App.dialog.show_error("Red win",
@@ -884,6 +974,18 @@ func _announce_result() -> void:
 		SolahSeediGameState.Result.DRAW:
 			App.dialog.show_error("Draw",
 					"Sixty plies passed without a capture.")
+
+
+## AI-mode outcome from the human's side (the human plays red).
+func _track_ai_result() -> void:
+	var result := "draw"
+	match _state.result:
+		SolahSeediGameState.Result.RED_WIN:
+			result = "win"
+		SolahSeediGameState.Result.GREEN_WIN:
+			result = "loss"
+	App.analytics.track("ai_match_completed", {"result": result},
+			"solah-seedi")
 
 
 # --- Persistence --------------------------------------------------------

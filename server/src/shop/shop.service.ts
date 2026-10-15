@@ -14,6 +14,7 @@ import { WalletService } from '../wallet/wallet.service';
 import { CATALOG, ShopProduct, findProduct, ROYAL_PASS_PRODUCT_KEY } from './catalog';
 import { SystemConfigService } from '../config/system-config.service';
 import { StoreVerification, StoreVerifierRegistry } from './store-verifier';
+import { AnalyticsService } from '../analytics/analytics.service';
 
 export const PLATFORMS = ['GOOGLE_PLAY', 'APPLE_APP_STORE'] as const;
 export type Platform = (typeof PLATFORMS)[number];
@@ -80,6 +81,7 @@ export class ShopService {
     private readonly registry: StoreVerifierRegistry,
     private readonly config: ConfigService,
     private readonly systemConfig: SystemConfigService,
+    private readonly analytics: AnalyticsService,
   ) {}
 
   private get cfg(): AppConfig {
@@ -242,9 +244,21 @@ export class ShopService {
             rawVerification: verification.raw as Prisma.InputJsonValue,
           },
         });
+        void this.analytics.record({
+          type: 'coin_purchase',
+          userId,
+          data: { productKey: product.productKey, coins: product.coins },
+          dedupeKey: `coin_purchase:${platform}:${token}`,
+        });
         return this.envelope(userId, 'granted', purchase, credit.wallet.balance);
       }
       const purchase = await this.grantPass(userId, platform, product, token, verification, passDays);
+      void this.analytics.record({
+        type: 'royal_pass_purchase',
+        userId,
+        data: { productKey: product.productKey, passDays },
+        dedupeKey: `royal_pass_purchase:${platform}:${token}`,
+      });
       return this.envelope(userId, 'granted', purchase);
     } catch (error) {
       if (this.isUniqueViolation(error)) {

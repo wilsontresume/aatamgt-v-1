@@ -14,6 +14,7 @@ import { WalletService } from '../wallet/wallet.service';
 import { sha256 } from '../common/crypto.service';
 import { AppConfig } from '../config/configuration';
 import { SystemConfigService } from '../config/system-config.service';
+import { AnalyticsService } from '../analytics/analytics.service';
 import { LoginDto, RegisterDto } from './dto/auth.dto';
 import * as bcrypt from 'bcryptjs';
 
@@ -46,6 +47,7 @@ export class AuthService {
     private readonly config: ConfigService,
     private readonly wallet: WalletService,
     private readonly systemConfig: SystemConfigService,
+    private readonly analytics: AnalyticsService,
   ) {
     this.cfg = this.config.get<AppConfig>('app') as AppConfig;
   }
@@ -92,6 +94,11 @@ export class AuthService {
     });
 
     const tokens = await this.issueTokens(user);
+    void this.analytics.record({
+      type: 'registration',
+      userId: user.id,
+      dedupeKey: `registration:${user.id}`,
+    });
     return { user, tokens };
   }
 

@@ -162,7 +162,7 @@ func _test_open_leaderboard_from_menu() -> void:
 	_check(menu != null, "main menu is on screen")
 	if menu == null:
 		return
-	var button: Button = menu.get_node_or_null("Margin/Content/RankingsButton")
+	var button: Button = menu.get_node_or_null("Margin/Content/FeaturesRow/RankingsButton")
 	_check(button != null, "main menu has a Rankings button")
 	if button == null:
 		return

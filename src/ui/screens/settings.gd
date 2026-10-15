@@ -7,6 +7,7 @@ extends Control
 @onready var _version_label: Label = $Margin/Content/AboutPanel/AboutBody/VersionLabel
 @onready var _sign_in_button: Button = $Margin/Content/AccountPanel/AccountBody/SignInButton
 @onready var _account_hint: Label = $Margin/Content/AccountPanel/AccountBody/AccountHint
+@onready var _analytics_toggle: CheckButton = $Margin/Content/PrivacyPanel/PrivacyBody/AnalyticsRow/AnalyticsToggle
 
 const SETTINGS_SECTION := "audio"
 const KEY_MASTER_VOLUME := "master_volume"
@@ -26,6 +27,9 @@ func _ready() -> void:
 	App.auth.session_changed.connect(_on_account_changed)
 	App.auth.signed_out.connect(_on_signed_out)
 	_refresh_account()
+
+	_analytics_toggle.set_pressed_no_signal(App.analytics.is_enabled())
+	_analytics_toggle.toggled.connect(_on_analytics_toggled)
 
 
 func _on_sign_in_pressed() -> void:
@@ -63,6 +67,10 @@ func _on_volume_changed(value: float) -> void:
 	if bus >= 0:
 		AudioServer.set_bus_volume_db(bus, linear_to_db(maxf(value, 0.0001)))
 	App.save_local_setting(SETTINGS_SECTION, KEY_MASTER_VOLUME, value)
+
+
+func _on_analytics_toggled(pressed: bool) -> void:
+	App.analytics.set_enabled(pressed)
 
 
 func _refresh_volume_label(value: float) -> void:

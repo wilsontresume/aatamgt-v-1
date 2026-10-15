@@ -7,9 +7,10 @@ import { JwtRefreshGuard } from './jwt-refresh.guard';
 import { JwtRefreshStrategy } from './jwt-refresh.strategy';
 import { JwtStrategy } from './jwt.strategy';
 import { WalletModule } from '../wallet/wallet.module';
+import { AnalyticsModule } from '../analytics/analytics.module';
 
 @Module({
-  imports: [PassportModule, JwtModule.register({}), WalletModule],
+  imports: [PassportModule, JwtModule.register({}), WalletModule, AnalyticsModule],
   controllers: [AuthController],
   providers: [AuthService, JwtStrategy, JwtRefreshStrategy, JwtRefreshGuard],
   exports: [AuthService],

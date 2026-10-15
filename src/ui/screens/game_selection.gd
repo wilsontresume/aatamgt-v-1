@@ -25,4 +25,7 @@ func _wire(card: Control, screen_id: StringName) -> void:
 func _on_card_input(event: InputEvent, screen_id: StringName) -> void:
 	if event is InputEventMouseButton and event.pressed \
 			and event.button_index == MOUSE_BUTTON_LEFT:
+		if OS.is_debug_build():
+			print("UI: game selected -> %s" % screen_id)
+		App.analytics.track("game_selected", {}, String(screen_id))
 		App.navigation.go(screen_id)

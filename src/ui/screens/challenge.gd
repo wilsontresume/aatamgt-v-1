@@ -298,10 +298,12 @@ func _on_cancel_pressed() -> void:
 
 
 func _on_whatsapp_pressed() -> void:
+	App.analytics.track("share", {"channel": "whatsapp"}, _game_key)
 	OS.shell_open(SocialService.whatsapp_url(_share_text.text))
 
 
 func _on_copy_pressed() -> void:
+	App.analytics.track("share", {"channel": "copy"}, _game_key)
 	DisplayServer.clipboard_set(_share_text.text)
 	_status_label.text = "Message copied."
 
@@ -315,7 +317,8 @@ func _enter_match(body: Dictionary) -> void:
 		App.dialog.show_error("Unsupported game", game_key)
 		return
 	App.online.set_game_key(game_key)
-	App.online.request_auto_online()
+	var match_id := str(body.get("matchId", body.get("match_id", "")))
+	App.online.request_auto_online(match_id)
 	App.navigation.go(screen)
 
 

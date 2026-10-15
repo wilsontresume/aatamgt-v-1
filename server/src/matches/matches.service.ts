@@ -13,6 +13,9 @@ import { GamesService } from '../games/games.service';
 import { MatchEventsService } from '../events/match-events.service';
 import { MatchClockService } from './match-clock.service';
 import { RankingsService } from '../rankings/rankings.service';
+import { AnalyticsService } from '../analytics/analytics.service';
+import { WalletService } from '../wallet/wallet.service';
+import { TiersService } from '../matchmaking/tiers.service';
 import { AppConfig } from '../config/configuration';
 import {
   CompletionReason,
@@ -29,6 +32,13 @@ export interface CreateMatchDto {
   gameKey: string;
   mode?: 'CASUAL' | 'RANKED' | 'PRIVATE';
   stakeCoins?: number;
+  /** Tier identifier preserved on the match row (matchmaking/challenges). */
+  tierId?: string;
+}
+
+export interface CreateWithAiDto extends CreateMatchDto {
+  /** Stable display name for the AI seat, e.g. GuestA7K2P. */
+  aiName: string;
 }
 
 export interface SubmitMoveDto {
@@ -37,7 +47,7 @@ export interface SubmitMoveDto {
 }
 
 export type MatchWithPlayers = GameMatch & {
-  players: (MatchPlayer & { user: { username: string } })[];
+  players: (MatchPlayer & { user: { username: string } | null })[];
 };
 
 /** Server-owned match state for a rules-engine game (stored as JSON). */
@@ -63,6 +73,9 @@ export class MatchesService {
     private readonly events: MatchEventsService,
     private readonly clock: MatchClockService,
     private readonly rankings: RankingsService,
+    private readonly analytics: AnalyticsService,
+    private readonly wallet: WalletService,
+    private readonly tiers: TiersService,
     config: ConfigService,
   ) {
     this.cfg = config.get<AppConfig>('app') as AppConfig;
@@ -71,8 +84,15 @@ export class MatchesService {
   async create(userId: string, dto: CreateMatchDto): Promise<MatchWithPlayers> {
     const game = await this.games.getByKey(dto.gameKey);
     if (game.status !== 'ACTIVE') throw new ConflictException('Game is not available');
-    if ((dto.stakeCoins ?? 0) !== 0) {
-      throw new ConflictException('Stakes are disabled');
+
+    // Server-authoritative stake: when a tier is selected the DB tier is the
+    // only source of the stake amount — client-sent stakeCoins is ignored.
+    let stakeCoins = Math.max(0, Math.floor(dto.stakeCoins ?? 0));
+    let tierId: string | null = dto.tierId ?? null;
+    if (tierId) {
+      const tier = await this.tiers.requireActiveForGame(tierId, game.key);
+      stakeCoins = tier.costCoins;
+      tierId = tier.id;
     }
 
     const match = await this.prisma.gameMatch.create({
@@ -80,6 +100,8 @@ export class MatchesService {
         gameId: game.id,
         gameKey: game.key,
         mode: dto.mode ?? 'CASUAL',
+        stakeCoins,
+        tierId,
         createdByUserId: userId,
         players: { create: { userId, seat: 0 } },
       },
@@ -88,6 +110,46 @@ export class MatchesService {
 
     if (game.minPlayers <= 1) return this.activate(match.id);
     return match;
+  }
+
+  /**
+   * Matchmaking AI fallback: creates a PENDING match with the human in
+   * seat 0 and an AI seat (no User row), then activates immediately.
+   * The AI is flagged in MatchPlayer.isAi and never counted as a human
+   * account.
+   */
+  async createWithAiOpponent(userId: string, dto: CreateWithAiDto): Promise<MatchWithPlayers> {
+    const game = await this.games.getByKey(dto.gameKey);
+    if (game.status !== 'ACTIVE') throw new ConflictException('Game is not available');
+    if (!getAdapter(game.key)) throw new ConflictException('Game has no server engine');
+
+    // Server-authoritative stake (same rule as create()).
+    let stakeCoins = Math.max(0, Math.floor(dto.stakeCoins ?? 0));
+    let tierId: string | null = dto.tierId ?? null;
+    if (tierId) {
+      const tier = await this.tiers.requireActiveForGame(tierId, game.key);
+      stakeCoins = tier.costCoins;
+      tierId = tier.id;
+    }
+
+    const match = await this.prisma.gameMatch.create({
+      data: {
+        gameId: game.id,
+        gameKey: game.key,
+        mode: dto.mode ?? 'CASUAL',
+        stakeCoins,
+        tierId,
+        createdByUserId: userId,
+        players: {
+          create: [
+            { userId, seat: 0 },
+            { userId: null, seat: 1, isAi: true, aiName: dto.aiName },
+          ],
+        },
+      },
+      include: { players: { include: { user: { select: { username: true } } } } },
+    });
+    return this.activate(match.id);
   }
 
   async join(userId: string, matchId: string): Promise<MatchWithPlayers> {
@@ -136,6 +198,26 @@ export class MatchesService {
       data,
       include: { players: { include: { user: { select: { username: true } } } } },
     });
+
+    // Stake debit is server-authoritative and idempotent per match.
+    if (previous.stakeCoins > 0) {
+      for (const player of match.players) {
+        if (player.isAi || !player.userId) continue;
+        try {
+          await this.wallet.debit(player.userId, previous.stakeCoins, {
+            type: 'MATCH_REWARD',
+            refType: 'match_stake',
+            refId: match.id,
+            idempotencyKey: `match_stake:${match.id}:${player.userId}`,
+            memo: `Stake for match ${match.id}`,
+          });
+        } catch (error) {
+          this.logger.error(`stake debit failed for ${player.userId}: ${String(error)}`);
+          throw new ConflictException('Unable to lock stake coins for this match');
+        }
+      }
+    }
+
     this.publishStatus(match, { status: match.status });
     if (deadline) this.armTurn(matchId, deadline);
     return match;
@@ -212,6 +294,178 @@ export class MatchesService {
       return this.submitEngineMove(userId, matchId, dto, engine);
     }
     return this.submitGenericMove(userId, preview, dto);
+  }
+
+  /**
+   * Server-driven AI move. Only the AI driver calls this; the payload is
+   * generated from the same engine and re-validated inside the row lock
+   * exactly like a human move. The AI MatchPlayer row (isAi=true) must
+   * exist and be the side to move.
+   */
+  async submitAiMove(matchId: string, matchPlayerId: string, payload: Record<string, unknown>) {
+    const engine = getAdapter(
+      (await this.requireMatch(matchId, { players: false })).gameKey,
+    );
+    if (!engine) throw new ConflictException('Game has no server engine');
+    const outcome = await this.prisma.$transaction(async (tx) => {
+      await tx.$queryRaw`SELECT id FROM GameMatch WHERE id = ${matchId} FOR UPDATE`;
+      const match = await tx.gameMatch.findUnique({
+        where: { id: matchId },
+        include: { players: true },
+      });
+      if (!match) throw new NotFoundException('Match not found');
+      if (match.status !== 'ACTIVE') throw new ConflictException('Match is not active');
+      const seat = match.players.find((p) => p.id === matchPlayerId && p.isAi);
+      if (!seat) throw new ForbiddenException('Not an AI seat');
+      return this.engineTurn(tx, match, seat, payload, undefined, engine, null);
+    });
+
+    if (outcome.completion) {
+      this.clock.disarmMatch(matchId);
+      this.publishCompletion(
+        matchId,
+        outcome.stateVersion,
+        outcome.completion,
+        outcome.results!,
+        engine.gameKey,
+      );
+      await this.creditMatchRewards(matchId, outcome.completion);
+    } else {
+      this.armTurn(matchId, new Date(outcome.turnDeadlineAt));
+      this.events.publish({
+        kind: 'move',
+        data: {
+          matchId,
+          seq: outcome.seq,
+          stateVersion: outcome.stateVersion,
+          userId: null,
+          payload,
+          at: outcome.serverAt,
+          notation: outcome.notation,
+          state: outcome.state,
+          sideToMove: outcome.sideToMove,
+          turnDeadlineAt: outcome.turnDeadlineAt,
+        },
+      });
+    }
+
+    // When the AI seat is next to move, the driver reacts to the move event.
+    // Publishing here (completion path already returned) keeps the event
+    // stream consistent for AI and human moves alike.
+
+    return {
+      move: {
+        seq: outcome.seq,
+        userId: null,
+        payload,
+        notation: outcome.notation,
+        serverAt: outcome.serverAt,
+      },
+      stateVersion: outcome.stateVersion,
+      state: outcome.state,
+      sideToMove: outcome.sideToMove,
+      turnDeadlineAt: outcome.turnDeadlineAt,
+      ply: outcome.ply,
+      ...(outcome.completion
+        ? {
+            completed: {
+              reason: outcome.completion.reason,
+              winnerSeat: outcome.completion.winnerSeat,
+              results: Object.fromEntries(outcome.results!),
+            },
+          }
+        : {}),
+    };
+  }
+
+  /**
+   * Shared authoritative engine turn: parse → check → apply → persist
+   * under the caller's row lock. `userId` is the acting user for human
+   * moves, or null for server-driven AI moves.
+   */
+  private async engineTurn(
+    tx: Prisma.TransactionClient,
+    match: GameMatch & { players: MatchPlayer[] },
+    player: MatchPlayer,
+    payload: Record<string, unknown>,
+    clientSeq: number | undefined,
+    engine: EngineAdapter,
+    userId: string | null,
+  ) {
+    const matchId = match.id;
+    const serverState = match.serverState as EngineServerState | null;
+    if (!serverState || serverState.game !== engine.gameKey || !serverState.state) {
+      throw new ConflictException('Match state is not initialised');
+    }
+    const view = engine.load(serverState.state);
+    if (!view) throw new ConflictException('Match state is corrupt');
+    if (view.finished) throw new ConflictException('Match is already finished');
+
+    const moveCount = await tx.matchMove.count({ where: { matchId } });
+    const seq = moveCount + 1;
+    if (clientSeq !== undefined && clientSeq !== seq) {
+      throw new ConflictException(`Out of order move: expected seq ${seq}`);
+    }
+
+    if (view.seatToMove !== player.seat) throw new ForbiddenException('Not your turn');
+
+    const move = engine.parseMove(payload);
+    if (!move) throw new BadRequestException('Malformed move payload');
+    const issue = engine.check(view, move);
+    if (issue) throw new BadRequestException(issue);
+    const nextView = engine.apply(view, move);
+    if (!nextView) throw new BadRequestException('Illegal move');
+
+    const completion = engine.completion(nextView);
+    const deadline = new Date(Date.now() + this.cfg.match.turnTimeoutMs);
+    const nextState: EngineServerState = {
+      game: engine.gameKey,
+      state: nextView.raw,
+      turnDeadlineAt: deadline.toISOString(),
+      turnNumber: nextView.ply,
+      ...(serverState.rematchMatchId ? { rematchMatchId: serverState.rematchMatchId } : {}),
+      ...(completion
+        ? { completed: { reason: completion.reason, winnerSeat: completion.winnerSeat } }
+        : {}),
+    };
+
+    const moveRow = await tx.matchMove.create({
+      data: {
+        matchId,
+        seq,
+        matchPlayerId: player.id,
+        userId,
+        payload: payload as Prisma.InputJsonValue,
+        stateHash: nextView.hash,
+      },
+    });
+
+    const updated = await tx.gameMatch.update({
+      where: { id: matchId },
+      data: {
+        stateVersion: { increment: 1 },
+        serverState: nextState as unknown as Prisma.InputJsonValue,
+        ...(completion ? { status: 'COMPLETED', completedAt: new Date() } : {}),
+      },
+    });
+
+    let results: Map<string, 'WIN' | 'LOSS' | 'DRAW'> | null = null;
+    if (completion) {
+      results = await this.applyCompletion(tx, match, completion);
+    }
+
+    return {
+      seq,
+      stateVersion: updated.stateVersion,
+      notation: engine.notation(move),
+      state: nextView.raw,
+      sideToMove: nextView.sideKey,
+      turnDeadlineAt: nextState.turnDeadlineAt,
+      ply: nextView.ply,
+      serverAt: moveRow.serverAt.toISOString(),
+      completion,
+      results,
+    };
   }
 
   /** Legacy envelope rules for games without a rules engine. */
@@ -295,88 +549,23 @@ export class MatchesService {
       if (!match) throw new NotFoundException('Match not found');
       if (match.status !== 'ACTIVE') throw new ConflictException('Match is not active');
 
-      const player = match.players.find((p) => p.userId === userId);
+      const player = match.players.find((p) => p.userId === userId && !p.isAi);
       if (!player) throw new ForbiddenException('Only match participants can move');
       if (player.result === 'ABANDONED') throw new ForbiddenException('You left this match');
 
-      const serverState = match.serverState as EngineServerState | null;
-      if (!serverState || serverState.game !== engine.gameKey || !serverState.state) {
-        throw new ConflictException('Match state is not initialised');
-      }
-      const view = engine.load(serverState.state);
-      if (!view) throw new ConflictException('Match state is corrupt');
-      if (view.finished) throw new ConflictException('Match is already finished');
-
-      const moveCount = await tx.matchMove.count({ where: { matchId } });
-      const seq = moveCount + 1;
-      if (dto.clientSeq !== undefined && dto.clientSeq !== seq) {
-        throw new ConflictException(`Out of order move: expected seq ${seq}`);
-      }
-
-      if (view.seatToMove !== player.seat) throw new ForbiddenException('Not your turn');
-
-      const move = engine.parseMove(dto.payload);
-      if (!move) throw new BadRequestException('Malformed move payload');
-      const issue = engine.check(view, move);
-      if (issue) throw new BadRequestException(issue);
-      const nextView = engine.apply(view, move);
-      if (!nextView) throw new BadRequestException('Illegal move');
-
-      const completion = engine.completion(nextView);
-      const deadline = new Date(Date.now() + this.cfg.match.turnTimeoutMs);
-      const nextState: EngineServerState = {
-        game: engine.gameKey,
-        state: nextView.raw,
-        turnDeadlineAt: deadline.toISOString(),
-        turnNumber: nextView.ply,
-        ...(serverState.rematchMatchId ? { rematchMatchId: serverState.rematchMatchId } : {}),
-        ...(completion
-          ? { completed: { reason: completion.reason, winnerSeat: completion.winnerSeat } }
-          : {}),
-      };
-
-      const moveRow = await tx.matchMove.create({
-        data: {
-          matchId,
-          seq,
-          matchPlayerId: player.id,
-          userId,
-          payload: dto.payload as Prisma.InputJsonValue,
-          stateHash: nextView.hash,
-        },
-      });
-
-      const updated = await tx.gameMatch.update({
-        where: { id: matchId },
-        data: {
-          stateVersion: { increment: 1 },
-          serverState: nextState as unknown as Prisma.InputJsonValue,
-          ...(completion ? { status: 'COMPLETED', completedAt: new Date() } : {}),
-        },
-      });
-
-      let results: Map<string, 'WIN' | 'LOSS' | 'DRAW'> | null = null;
-      if (completion) {
-        results = await this.applyCompletion(tx, match, completion);
-      }
-
-      return {
-        seq,
-        stateVersion: updated.stateVersion,
-        notation: engine.notation(move),
-        state: nextView.raw,
-        sideToMove: nextView.sideKey,
-        turnDeadlineAt: nextState.turnDeadlineAt,
-        ply: nextView.ply,
-        serverAt: moveRow.serverAt.toISOString(),
-        completion,
-        results,
-      };
+      return this.engineTurn(tx, match, player, dto.payload, dto.clientSeq, engine, userId);
     });
 
     if (outcome.completion) {
       this.clock.disarmMatch(matchId);
-      this.publishCompletion(matchId, outcome.stateVersion, outcome.completion, outcome.results!);
+      this.publishCompletion(
+        matchId,
+        outcome.stateVersion,
+        outcome.completion,
+        outcome.results!,
+        engine.gameKey,
+      );
+      await this.creditMatchRewards(matchId, outcome.completion);
     } else {
       this.armTurn(matchId, new Date(outcome.turnDeadlineAt));
     }
@@ -457,11 +646,18 @@ export class MatchesService {
           serverState: this.completedServerState(match.serverState, completion),
         },
       });
-      return { stateVersion: updated.stateVersion, completion, results };
+      return { stateVersion: updated.stateVersion, completion, results, gameKey: match.gameKey };
     });
 
     this.clock.disarmMatch(matchId);
-    this.publishCompletion(matchId, outcome.stateVersion, outcome.completion, outcome.results);
+    this.publishCompletion(
+      matchId,
+      outcome.stateVersion,
+      outcome.completion,
+      outcome.results,
+      outcome.gameKey,
+    );
+    await this.creditMatchRewards(matchId, outcome.completion);
     return outcome;
   }
 
@@ -478,7 +674,13 @@ export class MatchesService {
         if (!serverState?.turnDeadlineAt) return null;
         const deadline = Date.parse(serverState.turnDeadlineAt);
         if (Number.isFinite(deadline) && Date.now() + 25 < deadline) {
-          return { rearm: new Date(deadline), completion: null, results: null, stateVersion: 0 };
+          return {
+            rearm: new Date(deadline),
+            completion: null,
+            results: null,
+            stateVersion: 0,
+            gameKey: match.gameKey,
+          };
         }
         const view = engine.load(serverState.state);
         if (!view || view.finished) return null;
@@ -494,13 +696,26 @@ export class MatchesService {
             serverState: this.completedServerState(match.serverState, completion),
           },
         });
-        return { rearm: null, completion, results, stateVersion: updated.stateVersion };
+        return {
+          rearm: null,
+          completion,
+          results,
+          stateVersion: updated.stateVersion,
+          gameKey: match.gameKey,
+        };
       });
 
       if (!outcome) return;
       if (outcome.completion) {
         this.clock.disarmMatch(matchId);
-        this.publishCompletion(matchId, outcome.stateVersion, outcome.completion, outcome.results!);
+        this.publishCompletion(
+          matchId,
+          outcome.stateVersion,
+          outcome.completion,
+          outcome.results!,
+          outcome.gameKey,
+        );
+        await this.creditMatchRewards(matchId, outcome.completion);
       } else if (outcome.rearm) {
         this.armTurn(matchId, outcome.rearm);
       }
@@ -532,14 +747,21 @@ export class MatchesService {
             serverState: this.completedServerState(match.serverState, completion),
           },
         });
-        return { completion, results, stateVersion: updated.stateVersion };
+        return { completion, results, stateVersion: updated.stateVersion, gameKey: match.gameKey };
       });
       if (!outcome) return;
       this.clock.disarmMatch(matchId);
-      this.publishCompletion(matchId, outcome.stateVersion, outcome.completion, outcome.results);
+      this.publishCompletion(
+        matchId,
+        outcome.stateVersion,
+        outcome.completion,
+        outcome.results,
+        outcome.gameKey,
+      );
+      await this.creditMatchRewards(matchId, outcome.completion);
     } catch (error) {
       this.logger.error(`disconnect forfeit failed for ${matchId}: ${String(error)}`);
-  }
+    }
   }
 
   /**
@@ -611,6 +833,12 @@ export class MatchesService {
       kind: 'rematch',
       data: { matchId, newMatchId: active.id, at: new Date().toISOString() },
     });
+    void this.analytics.record({
+      type: 'rematch',
+      userId,
+      gameKey: active.gameKey,
+      dedupeKey: `rematch:${active.id}`,
+    });
     return active;
   }
 
@@ -664,14 +892,17 @@ export class MatchesService {
       stateVersion: match.stateVersion,
       serverState: match.serverState,
       stakeCoins: match.stakeCoins,
+      tierId: match.tierId,
       players: match.players.map((p) => ({
         userId: p.userId,
-        username: p.user.username,
+        username: p.isAi ? (p.aiName ?? 'AI') : (p.user?.username ?? ''),
         seat: p.seat,
         team: p.team,
         color: p.color,
         result: p.result,
         score: p.score,
+        isAi: p.isAi,
+        aiName: p.aiName,
       })),
       startedAt: match.startedAt?.toISOString() ?? null,
       completedAt: match.completedAt?.toISOString() ?? null,
@@ -679,7 +910,12 @@ export class MatchesService {
     };
   }
 
-  /** Records WIN/LOSS/DRAW for both players and updates profiles (server-side only). */
+  /**
+   * Records WIN/LOSS/DRAW for both players and updates profiles
+   * (server-side only). AI seats are recorded for the result board but
+   * never receive ratings, profile stats or wallet credits — only human
+   * participants are ranked and paid.
+   */
   private async applyCompletion(
     tx: Prisma.TransactionClient,
     match: { id: string; gameKey: string; players: MatchPlayer[] },
@@ -694,27 +930,36 @@ export class MatchesService {
           : player.seat === completion.winnerSeat
             ? 'WIN'
             : 'LOSS';
-      results.set(player.userId, result);
+      // Key results by a stable participant id; AI seats use their row id.
+      const key = player.userId ?? `ai:${player.id}`;
+      results.set(key, result);
       await tx.matchPlayer.update({ where: { id: player.id }, data: { result } });
     }
 
     // Rating + record: computed and written exclusively on the server.
-    const userIds = players.map((p) => p.userId);
+    // AI seats are excluded — they have no User row and must not appear
+    // in multiplayer rankings or analytics as real players.
+    const humanPlayers = players.filter((p) => !p.isAi && p.userId);
+    const userIds = humanPlayers.map((p) => p.userId as string);
     const profiles = await tx.profile.findMany({ where: { userId: { in: userIds } } });
     const ratingOf = (userId: string): number =>
       profiles.find((p) => p.userId === userId)?.rating ?? 1000;
     const ratings = new Map(userIds.map((id) => [id, ratingOf(id)]));
 
-    for (const player of players) {
-      const opponentId = userIds.find((id) => id !== player.userId) ?? player.userId;
-      const my = ratings.get(player.userId)!;
-      const opp = ratings.get(opponentId)!;
-      const result = results.get(player.userId)!;
+    for (const player of humanPlayers) {
+      const uid = player.userId as string;
+      // Opponent rating: prefer the other human; fall back to a neutral
+      // 1000 when the opponent is AI so Elo still moves sensibly.
+      const opponentId =
+        userIds.find((id) => id !== uid) ?? null;
+      const my = ratings.get(uid)!;
+      const opp = opponentId ? ratings.get(opponentId)! : 1000;
+      const result = results.get(uid)!;
       const score = result === 'WIN' ? 1 : result === 'LOSS' ? 0 : 0.5;
       const expected = 1 / (1 + Math.pow(10, (opp - my) / 400));
       const delta = Math.round(ELO_K * (score - expected));
       await tx.profile.updateMany({
-        where: { userId: player.userId },
+        where: { userId: uid },
         data: {
           gamesPlayed: { increment: 1 },
           ...(result === 'WIN'
@@ -729,7 +974,11 @@ export class MatchesService {
 
     // Competitive per-game ratings (Phase 14): same transaction, guarded
     // by the unique (matchId, userId) event key, rated games only.
-    await this.rankings.applyMatchResult(tx, match, completion, results);
+    // AI seats are stripped so they never receive competitive ratings.
+    const humanResults = new Map(
+      [...results.entries()].filter(([key]) => !key.startsWith('ai:')),
+    ) as Map<string, 'WIN' | 'LOSS' | 'DRAW'>;
+    await this.rankings.applyMatchResult(tx, match, completion, humanResults);
     return results;
   }
 
@@ -755,6 +1004,7 @@ export class MatchesService {
     stateVersion: number,
     completion: MatchCompletion,
     results: Map<string, 'WIN' | 'LOSS' | 'DRAW'>,
+    gameKey?: string,
   ): void {
     this.events.publish({
       kind: 'status',
@@ -770,6 +1020,106 @@ export class MatchesService {
         },
       },
     });
+    if (gameKey) this.trackCompletionAnalytics(matchId, gameKey, completion, results);
+  }
+
+  /**
+   * Credits the human winner (if any) with stake × tier multiplier after a
+   * completed match. Free tier (stakeCoins 0) is a no-op. Draws refund both
+   * stakes; human losses vs AI and AI wins credit nothing. Idempotent per
+   * match so completion-path retries cannot double-pay.
+   */
+  private async creditMatchRewards(matchId: string, completion: MatchCompletion): Promise<void> {
+    try {
+      const match = await this.prisma.gameMatch.findUnique({
+        where: { id: matchId },
+        include: { players: true },
+      });
+      if (!match || !match.tierId || match.stakeCoins <= 0) return;
+
+      const tier = await this.tiers.byId(match.tierId);
+      const multBp = tier?.rewardMultiplierBp ?? 10_000;
+
+      const winner =
+        completion.winnerSeat === null
+          ? null
+          : match.players.find((p) => p.seat === completion.winnerSeat);
+      if (winner?.userId) {
+        const payout = Math.floor((match.stakeCoins * multBp) / 10_000);
+        if (payout > 0) {
+          await this.wallet.credit(winner.userId, payout, {
+            type: 'MATCH_REWARD',
+            refType: 'match_reward',
+            refId: match.id,
+            idempotencyKey: `match_reward:${match.id}`,
+            memo: `Winnings for match ${match.id}`,
+          });
+        }
+        return;
+      }
+
+      // Draw: refund every human seat's stake.
+      if (completion.winnerSeat === null) {
+        for (const player of match.players) {
+          if (player.isAi || !player.userId) continue;
+          await this.wallet.credit(player.userId, match.stakeCoins, {
+            type: 'MATCH_REWARD',
+            refType: 'match_refund',
+            refId: match.id,
+            idempotencyKey: `match_refund:${match.id}:${player.userId}`,
+            memo: `Draw refund for match ${match.id}`,
+          });
+        }
+      }
+    } catch (error) {
+      this.logger.error(`reward credit failed for ${matchId}: ${String(error)}`);
+    }
+  }
+
+  /**
+   * Product metrics for a finished online match: one match_completed
+   * event per participant (result + completion reason) plus a one-time
+   * first_match for anyone completing their first ever match. Fire and
+   * forget — analytics never breaks match flow.
+   */
+  private trackCompletionAnalytics(
+    matchId: string,
+    gameKey: string,
+    completion: MatchCompletion,
+    results: Map<string, 'WIN' | 'LOSS' | 'DRAW'>,
+  ): void {
+    for (const [userId, result] of results) {
+      if (userId.startsWith('ai:')) continue;
+      void this.analytics.record({
+        type: 'match_completed',
+        userId,
+        gameKey,
+        data: { result, reason: completion.reason },
+        dedupeKey: `match_completed:${matchId}:${userId}`,
+      });
+      void this.recordFirstMatch(userId, matchId);
+    }
+  }
+
+  private async recordFirstMatch(userId: string, matchId: string): Promise<void> {
+    try {
+      const prior = await this.prisma.analyticsEvent.count({
+        where: {
+          type: 'match_completed',
+          userId,
+          NOT: { dedupeKey: `match_completed:${matchId}:${userId}` },
+        },
+      });
+      if (prior === 0) {
+        void this.analytics.record({
+          type: 'first_match',
+          userId,
+          dedupeKey: `first_match:${userId}`,
+        });
+      }
+    } catch (error) {
+      this.logger.warn(`first_match check failed for ${userId}: ${String(error)}`);
+    }
   }
 
   private publishStatus(match: GameMatch, extra: { status: string }): void {

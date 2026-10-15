@@ -28,7 +28,7 @@ enum ErrorKind {
 }
 
 const API_PREFIX := "/api/v1"
-const TIMEOUT_SECONDS := 6.0
+const TIMEOUT_SECONDS := 15.0
 
 var _base_url := ""
 var _ca_cert_path := ""

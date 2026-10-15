@@ -1,0 +1,51 @@
+[gd_scene load_steps=2 format=3]
+
+[ext_resource type="Script" path="res://src/ui/menu/menu_banner.gd" id="1_mb"]
+
+[node name="MenuBanner" type="Button"]
+custom_minimum_size = Vector2(0, 72)
+script = ExtResource("1_mb")
+
+[node name="Row" type="HBoxContainer" parent="."]
+anchor_right = 1.0
+anchor_bottom = 1.0
+offset_left = 12.0
+offset_top = 8.0
+offset_right = -10.0
+offset_bottom = -8.0
+theme_override_constants/separation = 10
+mouse_filter = 2
+
+[node name="Icon" type="Control" parent="Row"]
+layout_mode = 2
+custom_minimum_size = Vector2(34, 34)
+size_flags_vertical = 4
+mouse_filter = 2
+
+[node name="Text" type="VBoxContainer" parent="Row"]
+layout_mode = 2
+size_flags_horizontal = 3
+size_flags_vertical = 4
+theme_override_constants/separation = 1
+mouse_filter = 2
+
+[node name="TitleLabel" type="Label" parent="Row/Text"]
+layout_mode = 2
+theme_override_font_sizes/font_size = 15
+theme_override_colors/font_color = Color(1, 1, 1, 1)
+text = "Daily Rewards"
+mouse_filter = 2
+
+[node name="SubtitleLabel" type="Label" parent="Row/Text"]
+layout_mode = 2
+theme_override_font_sizes/font_size = 11
+theme_override_colors/font_color = Color(1, 1, 1, 0.85)
+text = "Claim your daily reward!"
+mouse_filter = 2
+autowrap_mode = 2
+
+[node name="Chevron" type="Control" parent="Row"]
+layout_mode = 2
+custom_minimum_size = Vector2(18, 18)
+size_flags_vertical = 4
+mouse_filter = 2

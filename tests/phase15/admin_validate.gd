@@ -59,9 +59,9 @@ func _test_wiring() -> void:
 	var menu: PackedScene = load(MAIN_MENU_SCENE)
 	var menu_inst: Control = menu.instantiate()
 	var admin_button: Node = menu_inst.get_node_or_null(
-			"Margin/Content/AdminButton")
+			"Margin/Content/FeaturesRow/AdminButton")
 	_check(admin_button != null, "main menu has an Admin button")
-	_check(admin_button is Button and admin_button.text == "Admin",
+	_check(admin_button is Button and admin_button.caption == "Admin",
 			"Admin button is labelled")
 	_check(admin_button != null and not admin_button.visible,
 			"Admin button ships hidden until a staff session")

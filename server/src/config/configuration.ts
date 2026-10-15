@@ -22,6 +22,12 @@ export interface AppConfig {
     turnTimeoutMs: number;
     disconnectGraceMs: number;
   };
+  matchmaking: {
+    /** How long a queue ticket waits for a real opponent before AI fallback. */
+    timeoutMs: number;
+    /** Delay before the server drives an AI move (visual breathing room). */
+    aiMoveDelayMs: number;
+  };
   coins: {
     registrationBonus: number;
     dailyLoginBonus: number;
@@ -97,6 +103,10 @@ export default registerAs<AppConfig>('app', () => {
     match: {
       turnTimeoutMs: num(process.env.MATCH_TURN_TIMEOUT_MS, 60_000),
       disconnectGraceMs: num(process.env.MATCH_DISCONNECT_GRACE_MS, 30_000),
+    },
+    matchmaking: {
+      timeoutMs: num(process.env.MATCHMAKING_TIMEOUT_MS, 8_000),
+      aiMoveDelayMs: num(process.env.MATCHMAKING_AI_MOVE_DELAY_MS, 1_200),
     },
     coins: {
       registrationBonus: num(process.env.COINS_REGISTRATION_BONUS, 1000),

@@ -57,9 +57,11 @@ model User {
   leaderboardRows LeaderboardEntry[]
   auditLogs       AdminAuditLog[]
   userCosmetics   UserCosmetic[]
+  analyticsEvents AnalyticsEvent[]
   gameRatings     GameRating[]
   ratingEvents    RatingEvent[]
   purchases       Purchase[]
+  matchmakingTickets MatchmakingTicket[]
 
   @@index([status])
   @@index([createdAt])
@@ -164,6 +166,24 @@ model Game {
   matches GameMatch[]
 }
 
+/// Admin-managed virtual-coin stake tier. Players read active tiers from
+/// GET /tiers; admins CRUD via /admin/tiers. GameMatch.tierId stays a
+/// snapshot string (no FK) so historical matches survive tier edits.
+model Tier {
+  id                 String   @id @db.VarChar(64)
+  name               String   @db.VarChar(64)
+  gameKey            String?  @db.VarChar(64)
+  entryCostCoins     Int      @default(0)
+  rewardMultiplierBp Int      @default(10000)
+  active             Boolean  @default(true)
+  displayOrder       Int      @default(0)
+  createdAt          DateTime @default(now())
+  updatedAt          DateTime @updatedAt
+
+  @@index([active, displayOrder])
+  @@index([gameKey, active])
+}
+
 // ---------------------------------------------------------------------------
 // Matches (server-authoritative envelope; no rules engine yet)
 // ---------------------------------------------------------------------------
@@ -198,6 +218,7 @@ model GameMatch {
   status       MatchStatus @default(PENDING)
   mode         MatchMode   @default(CASUAL)
   stakeCoins   Int         @default(0)
+  tierId       String?
   stateVersion Int         @default(0)
   serverState  Json?
   createdByUserId String?
@@ -218,8 +239,10 @@ model GameMatch {
 model MatchPlayer {
   id        String      @id @default(cuid())
   matchId   String
-  userId    String
+  userId    String?
   seat      Int
+  isAi      Boolean     @default(false)
+  aiName    String?
   color     String?     @db.VarChar(32)
   team      Int?
   result    MatchResult @default(PENDING)
@@ -228,7 +251,7 @@ model MatchPlayer {
   leftAt    DateTime?
 
   match     GameMatch @relation(fields: [matchId], references: [id], onDelete: Cascade)
-  user      User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+  user      User?     @relation(fields: [userId], references: [id], onDelete: Cascade)
   moves     MatchMove[]
 
   @@unique([matchId, seat])
@@ -240,17 +263,41 @@ model MatchMove {
   matchId        String
   seq            Int
   matchPlayerId  String?
-  userId         String
+  userId         String?
   payload        Json
   stateHash      String?       @db.VarChar(64)
   serverAt       DateTime      @default(now())
 
   match       GameMatch   @relation(fields: [matchId], references: [id], onDelete: Cascade)
   matchPlayer MatchPlayer? @relation(fields: [matchPlayerId], references: [id], onDelete: SetNull)
-  user        User        @relation(fields: [userId], references: [id], onDelete: Cascade)
+  user        User?       @relation(fields: [userId], references: [id], onDelete: Cascade)
 
   @@unique([matchId, seq])
   @@index([userId])
+}
+
+enum MatchmakingStatus {
+  WAITING
+  MATCHED
+  CANCELLED
+  EXPIRED
+}
+
+model MatchmakingTicket {
+  id             String              @id @default(cuid())
+  userId         String
+  gameKey        String
+  tierId         String
+  status         MatchmakingStatus  @default(WAITING)
+  matchedMatchId String?
+  createdAt      DateTime            @default(now())
+  updatedAt      DateTime            @updatedAt
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([gameKey, tierId, status])
+  @@index([userId, status])
+  @@index([status, createdAt])
 }
 
 // ---------------------------------------------------------------------------
@@ -351,6 +398,7 @@ model Challenge {
   id          String         @id @default(cuid())
   code        String         @unique
   gameKey     String         @db.VarChar(64)
+  tierId      String?
   challengerId String
   inviteeId   String?
   matchId     String?
@@ -624,4 +672,80 @@ model DevStorePurchase {
   updatedAt     DateTime       @updatedAt
 
   @@index([userId, issuedAt])
+}
+
+// ---------------------------------------------------------------------------
+// Analytics (privacy-conscious product metrics)
+// ---------------------------------------------------------------------------
+// Append-only event log. No PII columns: never store emails, usernames,
+// IPs, user agents or device fingerprints. `installId` is a random UUID
+// minted client-side (not derived from any hardware identifier) and is
+// only ever compared for equality; `userId` is the internal cuid.
+// Server-authoritative events are written automatically; client-reported
+// events are restricted to an allow-list in the analytics service.
+
+enum AnalyticsSubjectType {
+  INSTALL
+  USER
+}
+
+enum AnalyticsEventType {
+  install
+  first_launch
+  registration
+  guest_conversion
+  session_start
+  session_end
+  match_completed
+  first_match
+  rematch
+  game_selected
+  ai_match_completed
+  friend_request
+  challenge_created
+  challenge_accepted
+  share
+  rewarded_ad_started
+  rewarded_ad_completed
+  interstitial_displayed
+  royal_pass_purchase
+  coin_purchase
+  cosmetic_purchase
+}
+
+model AnalyticsEvent {
+  id         String              @id @default(cuid())
+  type       AnalyticsEventType
+  userId     String?
+  installId  String?             @db.VarChar(64)
+  sessionId  String?             @db.VarChar(64)
+  gameKey    String?             @db.VarChar(64)
+  platform   String?             @db.VarChar(32)
+  version    String?             @db.VarChar(32)
+  data       Json?
+  dedupeKey  String?             @unique
+  createdAt  DateTime            @default(now())
+
+  user User? @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([type, createdAt])
+  @@index([userId, createdAt])
+  @@index([installId, createdAt])
+  @@index([sessionId])
+}
+
+// One row per subject per UTC day, upserted (INSERT … ON DUPLICATE KEY
+// UPDATE) on every recorded event. DAU/MAU and D1..D30 retention are
+// exact "was active on day D" counts derived from this table, which
+// keeps the summary endpoint a handful of group-by queries instead of
+// a full scan of AnalyticsEvent.
+
+model AnalyticsActiveDay {
+  id          String              @id @default(cuid())
+  subjectType AnalyticsSubjectType
+  subjectId   String              @db.VarChar(64)
+  day         DateTime            @db.Date
+
+  @@unique([subjectType, subjectId, day])
+  @@index([subjectType, day])
 }

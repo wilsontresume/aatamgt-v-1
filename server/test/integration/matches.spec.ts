@@ -45,12 +45,13 @@ describe('Matches (integration)', () => {
     matchId = res.body.id;
   });
 
-  it('refuses staked matches while gameplay is unimplemented', async () => {
+  it('rejects client-supplied stakes on the public create endpoint', async () => {
     const res = await request(app.getHttpServer())
       .post(`${apiPrefix(app)}/matches`)
       .set(auth(alice.accessToken))
       .send({ gameKey, stakeCoins: 100 });
-    expect(res.status).toBe(409);
+    // Public REST never accepts stakes — matchmaking is the only path.
+    expect(res.status).toBe(403);
   });
 
   it('activates the match when the second player joins', async () => {

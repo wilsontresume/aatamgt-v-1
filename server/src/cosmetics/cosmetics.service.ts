@@ -11,6 +11,7 @@ import { Prisma, WalletTxType } from '@prisma/client';
 import { PrismaService } from '../prisma/prisma.service';
 import { WalletService } from '../wallet/wallet.service';
 import { AppConfig } from '../config/configuration';
+import { AnalyticsService } from '../analytics/analytics.service';
 import { CATEGORY_ORDER, CosmeticCategoryKey, DEFAULT_KEY_BY_CATEGORY } from './catalog';
 
 const CATEGORY_RANK = new Map<string, number>(
@@ -42,6 +43,7 @@ export class CosmeticsService {
     private readonly prisma: PrismaService,
     private readonly wallet: WalletService,
     private readonly config: ConfigService,
+    private readonly analytics: AnalyticsService,
   ) {}
 
   get devGrantsEnabled(): boolean {
@@ -199,6 +201,12 @@ export class CosmeticsService {
       }
     }
     if (!row) throw new ConflictException('You already own this cosmetic.');
+    void this.analytics.record({
+      type: 'cosmetic_purchase',
+      userId,
+      data: { key: item.key, category: item.category, price: item.price },
+      dedupeKey: `cosmetic_purchase:${userId}:${key}`,
+    });
     return { item: this.toView(item, row), balance };
   }
 

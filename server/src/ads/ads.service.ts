@@ -13,6 +13,7 @@ import { PrismaService } from '../prisma/prisma.service';
 import { WalletService } from '../wallet/wallet.service';
 import { NotificationsService } from '../notifications/notifications.service';
 import { AdVerifierRegistry } from './ad-verifier';
+import { AnalyticsService } from '../analytics/analytics.service';
 import { AppConfig } from '../config/configuration';
 import { SystemConfigService } from '../config/system-config.service';
 
@@ -91,6 +92,7 @@ export class AdsService {
     private readonly notifications: NotificationsService,
     private readonly verifiers: AdVerifierRegistry,
     private readonly systemConfig: SystemConfigService,
+    private readonly analytics: AnalyticsService,
     config: ConfigService,
   ) {
     const cfg = config.get<AppConfig>('app') as AppConfig;
@@ -145,7 +147,7 @@ export class AdsService {
       throw new BadRequestException('Unknown ad tier — expected BONUS or STANDARD');
     }
     const expiresAt = new Date(Date.now() + this.ads.sessionTtlSeconds * 1000);
-    return this.prisma.adSession.create({
+    const session = await this.prisma.adSession.create({
       data: {
         userId,
         provider: this.ads.provider,
@@ -154,6 +156,13 @@ export class AdsService {
         expiresAt,
       },
     });
+    void this.analytics.record({
+      type: 'rewarded_ad_started',
+      userId,
+      data: { tier },
+      dedupeKey: `rewarded_ad_started:${session.id}`,
+    });
+    return session;
   }
 
   /**
@@ -221,6 +230,13 @@ export class AdsService {
       title: 'Rewarded ad bonus',
       body: `You received ${coins} coins for watching an ad.`,
       data: { coins, tier: session.tier, transactionId: result.transaction.id },
+    });
+
+    void this.analytics.record({
+      type: 'rewarded_ad_completed',
+      userId,
+      data: { tier: session.tier },
+      dedupeKey: `rewarded_ad_completed:${session.id}`,
     });
 
     return {
@@ -352,6 +368,11 @@ export class AdsService {
     }
     const show = await this.prisma.adShow.create({
       data: { userId, kind: INTERSTITIAL_KIND, matchId: storedMatchId },
+    });
+    void this.analytics.record({
+      type: 'interstitial_displayed',
+      userId,
+      data: storedMatchId ? { matchId: storedMatchId } : undefined,
     });
     return { shownAt: show.shownAt.toISOString() };
   }

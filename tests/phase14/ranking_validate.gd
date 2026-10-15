@@ -57,9 +57,9 @@ func _test_wiring() -> void:
 	var menu: PackedScene = load(MAIN_MENU_SCENE)
 	var menu_inst: Control = menu.instantiate()
 	var rankings_button: Node = menu_inst.get_node_or_null(
-			"Margin/Content/RankingsButton")
+			"Margin/Content/FeaturesRow/RankingsButton")
 	_check(rankings_button != null, "main menu has a Rankings button")
-	_check(rankings_button is Button and rankings_button.text == "Rankings",
+	_check(rankings_button is Button and rankings_button.caption == "Rankings",
 			"Rankings button is labelled")
 	menu_inst.free()
 

@@ -209,10 +209,10 @@ func _test_main_menu_entry() -> void:
 	var menu: Control = scene.instantiate()
 	get_root().add_child(menu)
 	await _frame()
-	var button: Button = menu.get_node_or_null("Margin/Content/InventoryButton")
+	var button: Button = menu.get_node_or_null("Margin/Content/FeaturesRow/InventoryButton")
 	_check(button != null, "main menu has an Inventory button")
 	if button != null:
-		_check(button.text == "Inventory", "Inventory button is labelled")
+		_check(button.caption == "Inventory", "Inventory button is labelled")
 		button.pressed.emit()
 		_check(_app.navigation.current == &"inventory",
 				"Inventory button navigates to the inventory screen")

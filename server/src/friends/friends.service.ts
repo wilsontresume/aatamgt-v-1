@@ -10,6 +10,8 @@ import { ConfigService } from '@nestjs/config';
 import { Friendship, FriendStatus } from '@prisma/client';
 import { PrismaService } from '../prisma/prisma.service';
 import { NotificationsService } from '../notifications/notifications.service';
+import { AnalyticsService } from '../analytics/analytics.service';
+import { UserPresenceService } from '../realtime/user-presence.service';
 import { AppConfig } from '../config/configuration';
 
 @Injectable()
@@ -20,6 +22,8 @@ export class FriendsService {
     private readonly prisma: PrismaService,
     config: ConfigService,
     private readonly notifications: NotificationsService,
+    private readonly analytics: AnalyticsService,
+    private readonly presence: UserPresenceService,
   ) {
     this.social = (config.get<AppConfig>('app') as AppConfig).social;
   }
@@ -39,16 +43,20 @@ export class FriendsService {
         requester: { id: string; username: string };
         addressee: { id: string; username: string };
       },
-    ) => ({
-      id: row.id,
-      status: row.status,
-      createdAt: row.createdAt.toISOString(),
-      user:
+    ) => {
+      const other =
         row.requesterId === userId
           ? { id: row.addressee.id, username: row.addressee.username }
-          : { id: row.requester.id, username: row.requester.username },
-      outgoing: row.requesterId === userId,
-    });
+          : { id: row.requester.id, username: row.requester.username };
+      return {
+        id: row.id,
+        status: row.status,
+        createdAt: row.createdAt.toISOString(),
+        user: other,
+        online: this.presence.isOnline(other.id),
+        outgoing: row.requesterId === userId,
+      };
+    };
 
     return {
       friends: rows.filter((r) => r.status === 'ACCEPTED').map(mapRow),
@@ -121,6 +129,12 @@ export class FriendsService {
       title: 'Friend request',
       body: `${me?.username ?? 'Someone'} sent you a friend request`,
       data: { friendshipId: created.id, userId: fromUserId },
+    });
+    void this.analytics.record({
+      type: 'friend_request',
+      userId: fromUserId,
+      // No dedupeKey: a declined request can be legitimately re-sent on
+      // the same friendship row and must count again.
     });
     return { id: created.id, status: created.status, username: target.username };
   }

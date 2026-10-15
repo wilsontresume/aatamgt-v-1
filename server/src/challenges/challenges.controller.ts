@@ -12,6 +12,11 @@ class CreateChallengeBody {
   @IsString()
   @Matches(/^[a-zA-Z0-9_]{3,24}$/)
   inviteeUsername?: string;
+
+  @IsOptional()
+  @IsString()
+  @Matches(/^[a-z0-9-]{3,64}$/)
+  tierId?: string;
 }
 
 @Controller('challenges')

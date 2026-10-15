@@ -96,12 +96,14 @@ func _run() -> void:
 		if child.name == "AuthScreen":
 			auth_screen = child
 	if auth_screen != null:
-		auth_screen.get_node("Margin/Content/AuthPanel/AuthBody/SwitchButton").pressed.emit()
+		auth_screen.get_node(
+			"SafeMargin/Scroll/CenterH/Stage/Panel/Body/SwitchButton").pressed.emit()
 		await create_timer(0.4).timeout
 		await _snap("09_auth_register")
-		auth_screen.get_node("Margin/Content/AuthPanel/AuthBody/ErrorLabel").text = \
-				"That username is already taken."
-		auth_screen.get_node("Margin/Content/AuthPanel/AuthBody/ErrorLabel").visible = true
+		var auth_err: Label = auth_screen.get_node(
+				"SafeMargin/Scroll/CenterH/Stage/Panel/Body/ErrorLabel")
+		auth_err.text = "That username is already taken."
+		auth_err.visible = true
 		await _snap("10_auth_error")
 	else:
 		_log("FAIL: auth screen not found for capture")

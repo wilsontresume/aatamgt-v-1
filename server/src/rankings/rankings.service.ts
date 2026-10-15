@@ -218,11 +218,11 @@ export class RankingsService {
     const opponents = new Map<string, string>();
     if (matchIds.length > 0) {
       const rows = await this.prisma.matchPlayer.findMany({
-        where: { matchId: { in: matchIds }, userId: { not: userId } },
+        where: { matchId: { in: matchIds }, userId: { not: userId }, isAi: false },
         select: { matchId: true, user: { select: { username: true } } },
       });
       for (const row of rows) {
-        opponents.set(row.matchId, row.user.username);
+        if (row.user) opponents.set(row.matchId, row.user.username);
       }
     }
     return {

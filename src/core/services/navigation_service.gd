@@ -11,6 +11,8 @@ const SCREEN_PATHS := {
 	&"splash": "res://scenes/screens/splash_screen.tscn",
 	&"main_menu": "res://scenes/screens/main_menu.tscn",
 	&"game_selection": "res://scenes/screens/game_selection.tscn",
+	&"game_entry": "res://scenes/screens/game_entry.tscn",
+	&"friend_challenge": "res://scenes/screens/friend_challenge.tscn",
 	&"profile": "res://scenes/screens/profile.tscn",
 	&"settings": "res://scenes/screens/settings.tscn",
 	&"auth": "res://scenes/screens/auth_screen.tscn",
@@ -61,6 +63,19 @@ func back() -> bool:
 	navigate_requested.emit(previous, {})
 	screen_changed.emit(previous)
 	return true
+
+
+## Login-first entry: switches to a screen with an empty back stack so
+## Back exits the app instead of returning to the splash or a dead
+## session. Used for fresh-install / expired-session → welcome screen.
+func go_no_back(screen_id: StringName, params: Dictionary = {}) -> void:
+	if not SCREEN_PATHS.has(screen_id):
+		push_error("NavigationService: unknown screen '%s'" % screen_id)
+		return
+	_history.clear()
+	current = screen_id
+	navigate_requested.emit(screen_id, params)
+	screen_changed.emit(screen_id)
 
 
 func can_go_back() -> bool:

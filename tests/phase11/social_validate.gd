@@ -218,9 +218,9 @@ func _test_main_menu_entry_points() -> void:
 	get_root().add_child(menu)
 	await _frame()
 	var friends_button: Button = menu.get_node_or_null(
-			"Margin/Content/FriendsButton")
+			"Margin/Content/FeaturesRow/FriendsButton")
 	var history_button: Button = menu.get_node_or_null(
-			"Margin/Content/HistoryButton")
+			"Margin/Content/FeaturesRow/HistoryButton")
 	_check(friends_button != null, "main menu has a Friends button")
 	_check(history_button != null, "main menu has a History button")
 	if friends_button != null and history_button != null:

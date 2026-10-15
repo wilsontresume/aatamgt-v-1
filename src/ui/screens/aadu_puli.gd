@@ -34,6 +34,7 @@ const DIFFICULTY_NAMES := ["Easy", "Medium", "Hard"]
 @onready var _vs_ai_button: Button = $Margin/Content/ModeRow/VsAiButton
 @onready var _hot_seat_button: Button = $Margin/Content/ModeRow/HotSeatButton
 @onready var _online_button: Button = $Margin/Content/ModeRow/OnlineButton
+@onready var _mode_row: Control = $Margin/Content/ModeRow
 @onready var _ai_badge: Control = $Margin/Content/ModeRow/AiBadge
 @onready var _ai_badge_label: Label = \
 		$Margin/Content/ModeRow/AiBadge/AiBadgeRow/AiBadgeLabel
@@ -51,6 +52,13 @@ const DIFFICULTY_NAMES := ["Easy", "Medium", "Hard"]
 @onready var _easy_button: Button = $Margin/Content/DifficultyRow/EasyButton
 @onready var _medium_button: Button = $Margin/Content/DifficultyRow/MediumButton
 @onready var _hard_button: Button = $Margin/Content/DifficultyRow/HardButton
+@onready var _you_card: MatchPlayerCard = $Margin/Content/PlayersRow/YouPanel
+@onready var _turn_badge: MatchTurnBadge = $Margin/Content/PlayersRow/TurnPanel
+@onready var _opp_card: MatchPlayerCard = $Margin/Content/PlayersRow/OppPanel
+@onready var _you_hand: MatchHandPanel = $Margin/Content/HandRow/YouHandPanel
+@onready var _instr_label: Label = $Margin/Content/HandRow/InstrPanel/InstrLabel
+@onready var _opp_hand: MatchHandPanel = $Margin/Content/HandRow/OppHandPanel
+@onready var _rules_button: Button = $Margin/Content/Controls/RulesButton
 
 var _state: AaduPuliGameState
 var _history: Array[String] = []
@@ -68,6 +76,8 @@ var _ai_game_seed := 0
 var _online_mode := false
 var _submitting := false
 var _announced_match_id := ""
+## Entry-flow hand-off: matchmaking / accepted challenge already seated us.
+var _entry_flow := false
 ## Phase 12: capture-count baseline for the equipped capture effect.
 var _fx_seen_captures := -1
 
@@ -99,11 +109,24 @@ func _ready() -> void:
 	for button in [_vs_ai_button, _hot_seat_button, _easy_button,
 			_medium_button, _hard_button]:
 		button.toggled.connect(_on_mode_toggled)
+	_you_card.setup(false)
+	_opp_card.setup(true)
+	_you_hand.setup(false, AaduPuliBoard.GOAT_DISC)
+	_opp_hand.setup(true, AppTheme.C_ACCENT)
+	_rules_button.pressed.connect(_on_rules_pressed)
 	App.online.connection_changed.connect(_on_online_connection)
 	App.online.state_applied.connect(_on_online_state)
 	App.online.match_changed.connect(_on_online_match_changed)
 	App.online.match_completed.connect(_on_online_completed)
 	if App.online.consume_auto_online():
+		# Entry-flow hand-off (matchmaking / accepted challenge): the mode
+		# picker is irrelevant — the server already seated us. Hide it so
+		# the screen only shows the live match.
+		_entry_flow = true
+		if _mode_row != null:
+			_mode_row.visible = false
+		if _online_row != null:
+			_online_row.visible = false
 		_set_online_mode()
 	App.cosmetics.apply_board_skin(_board)
 	_refresh()
@@ -159,6 +182,7 @@ func _on_point_activated(point: int) -> void:
 		_submit(AaduPuliMove.place(point))
 		return
 	if _selected != -1:
+		_board.flash_invalid(point)
 		_selected = -1
 		_refresh()
 
@@ -300,11 +324,15 @@ func _online_bootstrap() -> void:
 	if not _online_mode or not conn.ok:
 		_refresh()
 		return
-	var found: Dictionary = await App.online.find_resumable_match()
-	if not _online_mode:
-		return
-	var resume_id := str(found.get("match_id", ""))
-	if not resume_id.is_empty():
+	# Entry-flow hand-off (matchmaking / accepted challenge) supplies the
+	# exact match id; otherwise scan for any resumable match of this game.
+	var resume_id := App.online.take_auto_match_id()
+	if resume_id.is_empty():
+		var found: Dictionary = await App.online.find_resumable_match()
+		if not _online_mode:
+			return
+		resume_id = str(found.get("match_id", ""))
+	if not resume_id.is_empty() and _online_mode:
 		await App.online.subscribe_match(resume_id)
 		_match_field.text = App.online.match_id
 	_sync_from_online()
@@ -619,6 +647,74 @@ func _refresh() -> void:
 	_undo_button.disabled = _history.is_empty()
 	_sync_mode_controls(thinking)
 	_board.configure(_state, _selected, _target_points(), _is_placing())
+	_refresh_hud()
+
+
+## Player panels, turn badge and hand trays — visual only.
+func _refresh_hud() -> void:
+	if _state == null:
+		return
+	var my_name := App.auth.get_username() if App.auth != null else "You"
+	var coins := App.coins.get_balance() if App.coins != null else -1
+	var opp_name := ""
+	var goats_on_board := _state.board.count(AaduPuliGameState.Cell.GOAT)
+	var tigers_on_board := _state.board.count(AaduPuliGameState.Cell.TIGER)
+	if _online_mode:
+		opp_name = App.online.opponent_username()
+		if opp_name.is_empty():
+			opp_name = "Opponent"
+		# Online seats: seat 0 = goats, seat 1 = tigers.
+		var my_is_goats := App.online.seat == 0
+		_turn_badge.set_turn("Your Move" if App.online.is_my_turn() else "Their Move",
+				App.online.turn_seconds_left() if App.online.is_my_turn() else -1)
+		_you_card.set_identity(my_name, "Goats" if my_is_goats else "Tigers", true, coins)
+		_opp_card.set_identity(opp_name, "Tigers" if my_is_goats else "Goats", false)
+		if my_is_goats:
+			_you_hand.set_counts("You · Goats", _state.goats_in_hand, goats_on_board, 15)
+			_opp_hand.set_counts(opp_name, -1, tigers_on_board, 3)
+		else:
+			_you_hand.set_counts("You · Tigers", -1, tigers_on_board, 3)
+			_opp_hand.set_counts(opp_name, _state.goats_in_hand, goats_on_board, 15)
+		_instr_label.text = "Your Move" if App.online.is_my_turn() else "Waiting…"
+	elif _ai_mode:
+		opp_name = "Guest" + _ai_guest_suffix()
+		var my_is_goats := _state.side_to_move != AaduPuliGameState.Side.TIGERS \
+				or true  # human always plays goats in vs-AI
+		_turn_badge.set_turn("Your Move" if _state.side_to_move == AaduPuliGameState.Side.GOATS
+				else "Their Move")
+		_you_card.set_identity(my_name, "Goats", true, coins)
+		_opp_card.set_identity(opp_name, "Tigers", false)
+		_you_hand.set_counts("You · Goats", _state.goats_in_hand, goats_on_board, 15)
+		_opp_hand.set_counts(opp_name, -1, tigers_on_board, 3)
+		_instr_label.text = "Your Move" if _state.side_to_move == AaduPuliGameState.Side.GOATS else "Their Move"
+	else:
+		opp_name = "Player 2"
+		my_name = "Player 1"
+		_turn_badge.set_turn("Player %d's Move" % (1 if _state.side_to_move == AaduPuliGameState.Side.GOATS else 2))
+		_you_card.set_identity(my_name, "Goats", true)
+		_opp_card.set_identity(opp_name, "Tigers", false)
+		_you_hand.set_counts("Goats · P1", _state.goats_in_hand, goats_on_board, 15)
+		_opp_hand.set_counts("Tigers · P2", -1, tigers_on_board, 3)
+		_instr_label.text = "Player %d's Move" % (1 if _state.side_to_move == AaduPuliGameState.Side.GOATS else 2)
+
+
+var _ai_guest := ""
+func _ai_guest_suffix() -> String:
+	if _ai_guest.is_empty():
+		var chars := "ABCDEFGHJKLMNPQRSTUVWXYZ23456789"
+		_ai_guest = ""
+		for i in 5:
+			_ai_guest += chars[randi() % chars.length()]
+	return _ai_guest
+
+
+func _on_rules_pressed() -> void:
+	App.dialog.show_error("Aadu Puli Aattam",
+			"Three tigers hunt fifteen goats. Goats are placed one at a "
+			+ "time and may slide to adjacent points. Tigers step to "
+			+ "adjacent points or jump over a goat to an empty point "
+			+ "beyond, removing it. Tigers win by catching five goats; "
+			+ "goats win by blocking all tiger moves.")
 
 
 func _sync_mode_controls(thinking: bool) -> void:
@@ -640,7 +736,7 @@ func _sync_mode_controls(thinking: bool) -> void:
 	# Offline-only controls hide online; Resign/Rematch follow the match.
 	_undo_button.visible = not _online_mode
 	_restart_button.visible = not _online_mode
-	_online_row.visible = _online_mode
+	_online_row.visible = _online_mode and not _entry_flow
 	_resign_button.visible = _online_mode and App.online.is_active()
 	_rematch_button.visible = _online_mode \
 			and App.online.match_status == "COMPLETED"
@@ -808,6 +904,8 @@ func _play_victory_fx_if_won() -> void:
 
 func _announce_result() -> void:
 	_play_victory_fx_if_won()
+	if _ai_mode:
+		_track_ai_result()
 	match _state.result:
 		AaduPuliGameState.Result.TIGERS_WIN:
 			if _state.goats_captured >= AaduPuliGameState.CAPTURES_TO_WIN:
@@ -822,6 +920,18 @@ func _announce_result() -> void:
 		AaduPuliGameState.Result.DRAW:
 			App.dialog.show_error("Draw",
 					"Thirty moves each without a winner.")
+
+
+## AI-mode outcome from the human's side (the human plays the goats).
+func _track_ai_result() -> void:
+	var result := "draw"
+	match _state.result:
+		AaduPuliGameState.Result.GOATS_WIN:
+			result = "win"
+		AaduPuliGameState.Result.TIGERS_WIN:
+			result = "loss"
+	App.analytics.track("ai_match_completed", {"result": result},
+			"aadu-puli-aattam")
 
 
 # --- Persistence --------------------------------------------------------

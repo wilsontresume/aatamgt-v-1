@@ -1,0 +1,25 @@
+[gd_scene load_steps=2 format=3]
+
+[ext_resource type="Script" path="res://src/ui/menu/menu_icon_button.gd" id="1_mib"]
+
+[node name="MenuIconButton" type="Button"]
+custom_minimum_size = Vector2(54, 66)
+script = ExtResource("1_mib")
+
+[node name="Icon" type="Control" parent="."]
+anchor_left = 0.5
+anchor_right = 0.5
+offset_left = -14.0
+offset_top = 9.0
+offset_right = 14.0
+offset_bottom = 37.0
+mouse_filter = 2
+
+[node name="CaptionLabel" type="Label" parent="."]
+anchor_right = 1.0
+offset_top = 40.0
+offset_bottom = 62.0
+theme_override_font_sizes/font_size = 10
+text = "Home"
+horizontal_alignment = 1
+mouse_filter = 2

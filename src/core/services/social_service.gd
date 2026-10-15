@@ -62,11 +62,14 @@ func block_user(username: String) -> Dictionary:
 
 # --- Challenges -----------------------------------------------------------
 
-## POST /challenges {gameKey, inviteeUsername?} → serialized challenge.
-func create_challenge(game_key: String, invitee_username: String = "") -> Dictionary:
+## POST /challenges {gameKey, inviteeUsername?, tierId?} → serialized challenge.
+func create_challenge(game_key: String, invitee_username: String = "",
+		tier_id: String = "") -> Dictionary:
 	var body := {"gameKey": game_key}
 	if not invitee_username.is_empty():
 		body["inviteeUsername"] = invitee_username
+	if not tier_id.is_empty():
+		body["tierId"] = tier_id
 	return await _auth.authenticated_post("/challenges", body)
 
 

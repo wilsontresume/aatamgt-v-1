@@ -13,6 +13,9 @@ import { PrismaService } from '../prisma/prisma.service';
 import { GamesService } from '../games/games.service';
 import { MatchesService } from '../matches/matches.service';
 import { NotificationsService } from '../notifications/notifications.service';
+import { AnalyticsService } from '../analytics/analytics.service';
+import { TiersService } from '../matchmaking/tiers.service';
+import { WalletService } from '../wallet/wallet.service';
 import { AppConfig } from '../config/configuration';
 
 /** Unambiguous alphabet: no 0/O, 1/I/L. 8 chars ≈ 40 bits — not enumerable. */
@@ -33,6 +36,8 @@ type ChallengeWithUsers = Challenge & {
 export interface CreateChallengeInput {
   gameKey: string;
   inviteeUsername?: string;
+  /** Optional staked tier — applied to the PRIVATE match on accept. */
+  tierId?: string;
 }
 
 @Injectable()
@@ -45,6 +50,9 @@ export class ChallengesService {
     private readonly games: GamesService,
     private readonly matches: MatchesService,
     private readonly notifications: NotificationsService,
+    private readonly analytics: AnalyticsService,
+    private readonly tiers: TiersService,
+    private readonly wallet: WalletService,
   ) {
     this.social = (config.get<AppConfig>('app') as AppConfig).social;
   }
@@ -90,8 +98,17 @@ export class ChallengesService {
       throw new HttpException('Too many pending challenges. Wait for a reply.', 429);
     }
 
+    let tierId: string | null = null;
+    if (dto.tierId) {
+      // Reject unknown/inactive tiers up-front so a bad challenge never
+      // creates an unstaked match by accident.
+      const tier = await this.tiers.requireActiveForGame(dto.tierId, game.key);
+      tierId = tier.id;
+    }
+
     const row = await this.createWithUniqueCode({
       gameKey: game.key,
+      tierId,
       challengerId: userId,
       inviteeId,
       expiresAt: new Date(Date.now() + this.social.challengeTtlSeconds * 1000),
@@ -110,6 +127,12 @@ export class ChallengesService {
         data: { code: row.code, gameKey: game.key },
       });
     }
+    void this.analytics.record({
+      type: 'challenge_created',
+      userId,
+      gameKey: game.key,
+      dedupeKey: `challenge_created:${row.id}`,
+    });
     return this.serializeOne(row);
   }
 
@@ -162,6 +185,22 @@ export class ChallengesService {
       throw new NotFoundException('Challenge not found');
     }
 
+    // Re-validate tier + balance on accept so a disabled tier or empty
+    // wallet can never flip the challenge into a staked match.
+    let stakeCoins = 0;
+    if (row.tierId) {
+      const tier = await this.tiers.requireActiveForGame(row.tierId, row.gameKey);
+      stakeCoins = tier.costCoins;
+      if (stakeCoins > 0) {
+        const wallet = await this.wallet.getBalance(userId);
+        if (wallet.balance < stakeCoins) {
+          throw new ForbiddenException(
+            `This tier costs ${stakeCoins} coins — you have ${wallet.balance}`,
+          );
+        }
+      }
+    }
+
     // Optimistic flip: only one accept can move PENDING → ACCEPTED.
     const flipped = await this.prisma.challenge.updateMany({
       where: { id: row.id, status: 'PENDING' },
@@ -173,6 +212,8 @@ export class ChallengesService {
       const match = await this.matches.create(row.challengerId, {
         gameKey: row.gameKey,
         mode: 'PRIVATE',
+        tierId: row.tierId ?? undefined,
+        stakeCoins,
       });
       const joined = await this.matches.join(userId, match.id);
       const updated = await this.prisma.challenge.update({
@@ -192,6 +233,12 @@ export class ChallengesService {
         data: { code: row.code, matchId: match.id, gameKey: row.gameKey },
       });
       const seat = joined.players.find((p) => p.userId === userId)?.seat ?? null;
+      void this.analytics.record({
+        type: 'challenge_accepted',
+        userId,
+        gameKey: row.gameKey,
+        dedupeKey: `challenge_accepted:${row.id}`,
+      });
       return { ...(await this.serializeOne(updated)), seat };
     } catch (err) {
       await this.prisma.challenge
@@ -247,6 +294,7 @@ export class ChallengesService {
       code: ch.code,
       gameKey: ch.gameKey,
       gameName: gameName ?? ch.gameKey,
+      tierId: ch.tierId ?? null,
       status: ch.status,
       createdAt: ch.createdAt.toISOString(),
       expiresAt: ch.expiresAt.toISOString(),
@@ -313,6 +361,7 @@ export class ChallengesService {
 
   private async createWithUniqueCode(data: {
     gameKey: string;
+    tierId?: string | null;
     challengerId: string;
     inviteeId: string | null;
     expiresAt: Date;

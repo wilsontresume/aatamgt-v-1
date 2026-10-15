@@ -17,25 +17,30 @@ anchor_bottom = 1.0
 grow_horizontal = 2
 grow_vertical = 2
 
-[node name="Content" type="VBoxContainer" parent="Center"]
-theme_override_constants/separation = 24
+[node name="Panel" type="PanelContainer" parent="Center"]
+theme_type_variation = "WoodBanner"
 
-[node name="Logo" type="TextureRect" parent="Center/Content"]
-custom_minimum_size = Vector2(150, 150)
+[node name="Content" type="VBoxContainer" parent="Center/Panel"]
+theme_override_constants/separation = 20
+
+[node name="Logo" type="TextureRect" parent="Center/Panel/Content"]
+custom_minimum_size = Vector2(140, 140)
 size_flags_horizontal = 4
 texture = ExtResource("2_icon")
 expand_mode = 1
 stretch_mode = 5
 
-[node name="AppName" type="Label" parent="Center/Content"]
+[node name="AppName" type="Label" parent="Center/Panel/Content"]
 theme_type_variation = "TitleLarge"
+theme_override_colors/font_color = Color(1, 0.84, 0.42, 1)
 text = "AATAMGT"
 horizontal_alignment = 1
 
-[node name="Tagline" type="Label" parent="Center/Content"]
+[node name="Tagline" type="Label" parent="Center/Panel/Content"]
 theme_type_variation = "Caption"
+theme_override_colors/font_color = Color(1, 0.95, 0.85, 0.9)
 text = "Indian Strategy Games"
 horizontal_alignment = 1
 
-[node name="Loading" parent="Center/Content" instance=ExtResource("3_load")]
+[node name="Loading" parent="Center/Panel/Content" instance=ExtResource("3_load")]
 size_flags_horizontal = 4

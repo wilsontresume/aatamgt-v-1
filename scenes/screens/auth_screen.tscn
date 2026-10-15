@@ -1,8 +1,21 @@
-[gd_scene load_steps=4 format=3]
+[gd_scene load_steps=7 format=3]
 
 [ext_resource type="Script" path="res://src/ui/screens/auth_screen.gd" id="1_as"]
-[ext_resource type="PackedScene" path="res://scenes/components/top_bar.tscn" id="2_tb"]
-[ext_resource type="PackedScene" path="res://scenes/components/button.tscn" id="3_btn"]
+[ext_resource type="Script" path="res://src/ui/menu/login_background.gd" id="2_bg"]
+[ext_resource type="Script" path="res://src/ui/auth/social_button.gd" id="3_soc"]
+[ext_resource type="Script" path="res://src/ui/menu/menu_icon.gd" id="4_mi"]
+[ext_resource type="Texture2D" path="res://UI/logo.png" id="5_logo"]
+
+[sub_resource type="StyleBoxFlat" id="back_pill"]
+content_margin_left = 16.0
+content_margin_top = 10.0
+content_margin_right = 18.0
+content_margin_bottom = 10.0
+bg_color = Color(0.05, 0.15, 0.18, 0.85)
+corner_radius_top_left = 14
+corner_radius_top_right = 14
+corner_radius_bottom_right = 14
+corner_radius_bottom_left = 14
 
 [node name="AuthScreen" type="Control"]
 anchor_right = 1.0
@@ -11,68 +24,222 @@ grow_horizontal = 2
 grow_vertical = 2
 script = ExtResource("1_as")
 
-[node name="Margin" type="MarginContainer" parent="."]
+[node name="Background" type="Control" parent="."]
 anchor_right = 1.0
 anchor_bottom = 1.0
 grow_horizontal = 2
 grow_vertical = 2
-theme_override_constants/margin_left = 24
-theme_override_constants/margin_top = 20
-theme_override_constants/margin_right = 24
-theme_override_constants/margin_bottom = 24
+mouse_filter = 2
+script = ExtResource("2_bg")
 
-[node name="Content" type="VBoxContainer" parent="Margin"]
-theme_override_constants/separation = 16
+[node name="BackButton" type="Button" parent="."]
+anchor_left = 0.0
+anchor_top = 0.0
+anchor_right = 0.0
+anchor_bottom = 0.0
+offset_left = 16.0
+offset_top = 14.0
+offset_right = 140.0
+offset_bottom = 62.0
+grow_horizontal = 1
+grow_vertical = 1
+visible = false
+theme_type_variation = "GhostButton"
+theme_override_colors/font_color = Color(1, 0.843, 0.416, 1)
+theme_override_styles/normal = SubResource("back_pill")
+text = "‹ Back"
 
-[node name="TopBar" parent="Margin/Content" instance=ExtResource("2_tb")]
-title = "Account"
-show_back = true
-show_coins = false
+[node name="SafeMargin" type="MarginContainer" parent="."]
+anchor_right = 1.0
+anchor_bottom = 1.0
+grow_horizontal = 2
+grow_vertical = 2
+theme_override_constants/margin_left = 18
+theme_override_constants/margin_top = 14
+theme_override_constants/margin_right = 18
+theme_override_constants/margin_bottom = 16
 
-[node name="AuthPanel" type="PanelContainer" parent="Margin/Content"]
-theme_type_variation = "Card"
+[node name="Scroll" type="ScrollContainer" parent="SafeMargin"]
+layout_mode = 2
+horizontal_scroll_mode = 0
+follow_focus = true
 
-[node name="AuthBody" type="VBoxContainer" parent="Margin/Content/AuthPanel"]
+[node name="CenterH" type="CenterContainer" parent="SafeMargin/Scroll"]
+layout_mode = 2
+
+[node name="Stage" type="VBoxContainer" parent="SafeMargin/Scroll/CenterH"]
+layout_mode = 2
+alignment = 1
 theme_override_constants/separation = 14
 
-[node name="HeadingLabel" type="Label" parent="Margin/Content/AuthPanel/AuthBody"]
-theme_type_variation = "Heading"
-text = "Sign in"
+[node name="Logo" type="TextureRect" parent="SafeMargin/Scroll/CenterH/Stage"]
+layout_mode = 2
+mouse_filter = 2
+texture = ExtResource("5_logo")
+expand_mode = 1
+stretch_mode = 5
 
-[node name="SubtitleLabel" type="Label" parent="Margin/Content/AuthPanel/AuthBody"]
-theme_type_variation = "Caption"
+[node name="Panel" type="PanelContainer" parent="SafeMargin/Scroll/CenterH/Stage"]
+layout_mode = 2
+theme_type_variation = "LoginPanel"
+
+[node name="Body" type="VBoxContainer" parent="SafeMargin/Scroll/CenterH/Stage/Panel"]
+layout_mode = 2
+theme_override_constants/separation = 12
+
+[node name="WelcomeLabel" type="Label" parent="SafeMargin/Scroll/CenterH/Stage/Panel/Body"]
+layout_mode = 2
+theme_type_variation = "WelcomeLabel"
+horizontal_alignment = 1
+text = "Welcome to"
+
+[node name="BrandLabel" type="Label" parent="SafeMargin/Scroll/CenterH/Stage/Panel/Body"]
+layout_mode = 2
+theme_type_variation = "BrandLabel"
+horizontal_alignment = 1
+text = "AatamGT"
+
+[node name="TaglineLabel" type="Label" parent="SafeMargin/Scroll/CenterH/Stage/Panel/Body"]
+layout_mode = 2
+theme_type_variation = "AuthTagline"
+horizontal_alignment = 1
 autowrap_mode = 3
-text = "Sign in to keep your progress across devices."
+text = "Play • Compete • Celebrate Our Games"
 
-[node name="UsernameField" type="LineEdit" parent="Margin/Content/AuthPanel/AuthBody"]
-custom_minimum_size = Vector2(0, 56)
+[node name="GoogleButton" type="Button" parent="SafeMargin/Scroll/CenterH/Stage/Panel/Body"]
+layout_mode = 2
+theme_type_variation = "GoogleButton"
+script = ExtResource("3_soc")
+text = "Continue with Google"
+badge = &"google"
+chevron_color = Color(0.2, 0.2, 0.2, 0.55)
+
+[node name="FacebookButton" type="Button" parent="SafeMargin/Scroll/CenterH/Stage/Panel/Body"]
+layout_mode = 2
+theme_type_variation = "FacebookButton"
+script = ExtResource("3_soc")
+text = "Continue with Facebook"
+badge = &"facebook"
+chevron_color = Color(1, 1, 1, 0.85)
+
+[node name="OrRow" type="HBoxContainer" parent="SafeMargin/Scroll/CenterH/Stage/Panel/Body"]
+layout_mode = 2
+alignment = 1
+theme_override_constants/separation = 10
+
+[node name="Line1" type="ColorRect" parent="SafeMargin/Scroll/CenterH/Stage/Panel/Body/OrRow"]
+custom_minimum_size = Vector2(0, 1)
+layout_mode = 2
+size_flags_horizontal = 3
+size_flags_vertical = 4
+mouse_filter = 2
+color = Color(1, 1, 1, 0.22)
+
+[node name="OrLabel" type="Label" parent="SafeMargin/Scroll/CenterH/Stage/Panel/Body/OrRow"]
+layout_mode = 2
+theme_type_variation = "AuthDivider"
+text = "OR"
+
+[node name="Line2" type="ColorRect" parent="SafeMargin/Scroll/CenterH/Stage/Panel/Body/OrRow"]
+custom_minimum_size = Vector2(0, 1)
+layout_mode = 2
+size_flags_horizontal = 3
+size_flags_vertical = 4
+mouse_filter = 2
+color = Color(1, 1, 1, 0.22)
+
+[node name="UsernameBox" type="PanelContainer" parent="SafeMargin/Scroll/CenterH/Stage/Panel/Body"]
+layout_mode = 2
+theme_type_variation = "AuthField"
+
+[node name="UsernameRow" type="HBoxContainer" parent="SafeMargin/Scroll/CenterH/Stage/Panel/Body/UsernameBox"]
+layout_mode = 2
+alignment = 1
+theme_override_constants/separation = 10
+
+[node name="UserIcon" type="Control" parent="SafeMargin/Scroll/CenterH/Stage/Panel/Body/UsernameBox/UsernameRow"]
+custom_minimum_size = Vector2(24, 24)
+layout_mode = 2
+script = ExtResource("4_mi")
+icon = &"profile"
+icon_color = Color(0.72, 0.79, 0.85, 1)
+
+[node name="UsernameField" type="LineEdit" parent="SafeMargin/Scroll/CenterH/Stage/Panel/Body/UsernameBox/UsernameRow"]
+custom_minimum_size = Vector2(0, 28)
+layout_mode = 2
+size_flags_horizontal = 3
 placeholder_text = "Username"
 max_length = 24
 clear_button_enabled = true
 
-[node name="PasswordField" type="LineEdit" parent="Margin/Content/AuthPanel/AuthBody"]
-custom_minimum_size = Vector2(0, 56)
+[node name="PasswordBox" type="PanelContainer" parent="SafeMargin/Scroll/CenterH/Stage/Panel/Body"]
+layout_mode = 2
+theme_type_variation = "AuthField"
+
+[node name="PasswordRow" type="HBoxContainer" parent="SafeMargin/Scroll/CenterH/Stage/Panel/Body/PasswordBox"]
+layout_mode = 2
+alignment = 1
+theme_override_constants/separation = 8
+
+[node name="LockIcon" type="Control" parent="SafeMargin/Scroll/CenterH/Stage/Panel/Body/PasswordBox/PasswordRow"]
+custom_minimum_size = Vector2(24, 24)
+layout_mode = 2
+script = ExtResource("4_mi")
+icon = &"lock"
+icon_color = Color(0.72, 0.79, 0.85, 1)
+
+[node name="PasswordField" type="LineEdit" parent="SafeMargin/Scroll/CenterH/Stage/Panel/Body/PasswordBox/PasswordRow"]
+custom_minimum_size = Vector2(0, 28)
+layout_mode = 2
+size_flags_horizontal = 3
 placeholder_text = "Password"
 secret = true
 max_length = 72
 
-[node name="ErrorLabel" type="Label" parent="Margin/Content/AuthPanel/AuthBody"]
+[node name="EyeButton" type="Button" parent="SafeMargin/Scroll/CenterH/Stage/Panel/Body/PasswordBox/PasswordRow"]
+custom_minimum_size = Vector2(46, 40)
+layout_mode = 2
+focus_mode = 0
+theme_type_variation = "GhostButton"
+tooltip_text = "Show password"
+
+[node name="EyeIcon" type="Control" parent="SafeMargin/Scroll/CenterH/Stage/Panel/Body/PasswordBox/PasswordRow/EyeButton"]
+anchor_right = 1.0
+anchor_bottom = 1.0
+offset_left = 13.0
+offset_top = 11.0
+offset_right = -13.0
+offset_bottom = -11.0
+script = ExtResource("4_mi")
+icon = &"eye_off"
+icon_color = Color(0.72, 0.79, 0.85, 1)
+
+[node name="ErrorLabel" type="Label" parent="SafeMargin/Scroll/CenterH/Stage/Panel/Body"]
+layout_mode = 2
 theme_type_variation = "Caption"
 theme_override_colors/font_color = Color(0.898, 0.282, 0.302, 1)
+horizontal_alignment = 1
 autowrap_mode = 3
 visible = false
 text = ""
 
-[node name="SubmitButton" parent="Margin/Content/AuthPanel/AuthBody" instance=ExtResource("3_btn")]
-text = "Sign in"
+[node name="SubmitButton" type="Button" parent="SafeMargin/Scroll/CenterH/Stage/Panel/Body"]
+layout_mode = 2
+theme_type_variation = "GoldSignIn"
+text = "Sign In"
 
-[node name="SwitchButton" parent="Margin/Content/AuthPanel/AuthBody" instance=ExtResource("3_btn")]
-variant = 2
+[node name="SwitchButton" type="Button" parent="SafeMargin/Scroll/CenterH/Stage/Panel/Body"]
+layout_mode = 2
+theme_type_variation = "LinkGold"
+script = ExtResource("3_soc")
 text = "New here? Create an account"
+chevron_color = Color(1, 0.843, 0.416, 0.9)
 
-[node name="GuestButton" parent="Margin/Content/AuthPanel/AuthBody" instance=ExtResource("3_btn")]
-variant = 2
-text = "Continue as guest"
-
-[node name="Spacer" type="Control" parent="Margin/Content"]
-size_flags_vertical = 3
+[node name="GuestButton" type="Button" parent="SafeMargin/Scroll/CenterH/Stage/Panel/Body"]
+layout_mode = 2
+theme_type_variation = "GuestOutline"
+script = ExtResource("3_soc")
+text = "Continue as Guest"
+badge = &"friends"
+badge_color = Color(1, 0.843, 0.416, 1)
+chevron_color = Color(1, 1, 1, 0.85)

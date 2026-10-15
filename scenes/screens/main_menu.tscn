@@ -1,9 +1,13 @@
-[gd_scene load_steps=5 format=3]
+[gd_scene load_steps=11 format=3]
 
 [ext_resource type="Script" path="res://src/ui/screens/main_menu.gd" id="1_mm"]
-[ext_resource type="PackedScene" path="res://scenes/components/top_bar.tscn" id="2_tb"]
-[ext_resource type="PackedScene" path="res://scenes/components/button.tscn" id="3_btn"]
-[ext_resource type="PackedScene" path="res://scenes/components/player_profile.tscn" id="4_pp"]
+[ext_resource type="Script" path="res://src/ui/menu/menu_background.gd" id="2_bg"]
+[ext_resource type="Texture2D" path="res://UI/logo.png" id="3_logo"]
+[ext_resource type="PackedScene" path="res://scenes/components/top_bar.tscn" id="4_tb"]
+[ext_resource type="PackedScene" path="res://scenes/components/player_profile.tscn" id="5_pp"]
+[ext_resource type="PackedScene" path="res://scenes/components/game_card.tscn" id="6_gc"]
+[ext_resource type="PackedScene" path="res://scenes/components/menu_icon_button.tscn" id="7_mib"]
+[ext_resource type="PackedScene" path="res://scenes/components/menu_banner.tscn" id="8_mb"]
 
 [node name="MainMenu" type="Control"]
 anchor_right = 1.0
@@ -12,76 +16,280 @@ grow_horizontal = 2
 grow_vertical = 2
 script = ExtResource("1_mm")
 
-[node name="Margin" type="MarginContainer" parent="."]
+[node name="Background" type="Control" parent="."]
+layout_mode = 1
+anchors_preset = 15
 anchor_right = 1.0
 anchor_bottom = 1.0
 grow_horizontal = 2
 grow_vertical = 2
-theme_override_constants/margin_left = 24
-theme_override_constants/margin_top = 20
-theme_override_constants/margin_right = 24
-theme_override_constants/margin_bottom = 24
+mouse_filter = 2
+script = ExtResource("2_bg")
+
+[node name="Margin" type="MarginContainer" parent="."]
+layout_mode = 1
+anchors_preset = 15
+anchor_right = 1.0
+anchor_bottom = 1.0
+grow_horizontal = 2
+grow_vertical = 2
+theme_override_constants/margin_left = 14
+theme_override_constants/margin_top = 10
+theme_override_constants/margin_right = 14
+theme_override_constants/margin_bottom = 8
+mouse_filter = 2
 
 [node name="Content" type="VBoxContainer" parent="Margin"]
-theme_override_constants/separation = 16
+layout_mode = 2
+theme_override_constants/separation = 6
+mouse_filter = 2
 
-[node name="TopBar" parent="Margin/Content" instance=ExtResource("2_tb")]
-title = "AATAMGT"
+[node name="TopBar" parent="Margin/Content" instance=ExtResource("4_tb")]
+unique_name_in_owner = false
+title = ""
 show_coins = true
+show_back = false
+layout_mode = 2
+size_flags_vertical = 0
 
-[node name="SpacerTop" type="Control" parent="Margin/Content"]
-custom_minimum_size = Vector2(0, 8)
+[node name="Header" type="HBoxContainer" parent="Margin/Content"]
+layout_mode = 2
+theme_override_constants/separation = 8
+mouse_filter = 2
+
+[node name="ProfilePill" type="PanelContainer" parent="Margin/Content/Header"]
+layout_mode = 2
+size_flags_horizontal = 0
+custom_minimum_size = Vector2(158, 60)
+mouse_filter = 0
+
+[node name="Profile" parent="Margin/Content/Header/ProfilePill" instance=ExtResource("5_pp")]
+layout_mode = 2
+mouse_filter = 2
+
+[node name="LogoRect" type="TextureRect" parent="Margin/Content/Header"]
+layout_mode = 2
+size_flags_horizontal = 3
+size_flags_vertical = 4
+custom_minimum_size = Vector2(0, 86)
+texture = ExtResource("3_logo")
+expand_mode = 1
+stretch_mode = 5
+mouse_filter = 2
+
+[node name="HeaderSpacer" type="Control" parent="Margin/Content/Header"]
+layout_mode = 2
+custom_minimum_size = Vector2(158, 0)
+mouse_filter = 2
+
+[node name="Carousel" type="HBoxContainer" parent="Margin/Content"]
+layout_mode = 2
 size_flags_vertical = 3
+alignment = 1
+theme_override_constants/separation = 4
+mouse_filter = 2
 
-[node name="ProfileCenter" type="CenterContainer" parent="Margin/Content"]
+[node name="SolahCard" parent="Margin/Content/Carousel" instance=ExtResource("6_gc")]
+layout_mode = 2
+size_flags_horizontal = 3
+size_flags_vertical = 4
+custom_minimum_size = Vector2(120, 230)
+game_id = &"solah_seedi"
+title_text = "Solah Seedi"
+base_color = Color(0.86, 0.25, 0.16, 1)
 
-[node name="Profile" parent="Margin/Content/ProfileCenter" instance=ExtResource("4_pp")]
+[node name="AaduCard" parent="Margin/Content/Carousel" instance=ExtResource("6_gc")]
+layout_mode = 2
+size_flags_horizontal = 3
+size_flags_vertical = 4
+custom_minimum_size = Vector2(120, 230)
+game_id = &"aadu_puli"
+title_text = "Aadu Puli Aattam"
+base_color = Color(0.79, 0.42, 0.13, 1)
 
-[node name="Gap" type="Control" parent="Margin/Content"]
-custom_minimum_size = Vector2(0, 40)
+[node name="MorrisCard" parent="Margin/Content/Carousel" instance=ExtResource("6_gc")]
+layout_mode = 2
+size_flags_horizontal = 3
+size_flags_vertical = 4
+custom_minimum_size = Vector2(120, 230)
+game_id = &"nine_mens_morris"
+title_text = "Nine Men's Morris"
+base_color = Color(0.09, 0.55, 0.55, 1)
 
-[node name="PlayButton" parent="Margin/Content" instance=ExtResource("3_btn")]
-custom_minimum_size = Vector2(0, 64)
-variant = 0
+[node name="Dots" type="HBoxContainer" parent="Margin/Content"]
+layout_mode = 2
+alignment = 1
+theme_override_constants/separation = 8
+mouse_filter = 2
+
+[node name="Dot0" type="Panel" parent="Margin/Content/Dots"]
+custom_minimum_size = Vector2(10, 10)
+layout_mode = 2
+mouse_filter = 2
+
+[node name="Dot1" type="Panel" parent="Margin/Content/Dots"]
+custom_minimum_size = Vector2(10, 10)
+layout_mode = 2
+mouse_filter = 2
+
+[node name="Dot2" type="Panel" parent="Margin/Content/Dots"]
+custom_minimum_size = Vector2(10, 10)
+layout_mode = 2
+mouse_filter = 2
+
+[node name="PlayWrap" type="CenterContainer" parent="Margin/Content"]
+layout_mode = 2
+mouse_filter = 2
+
+[node name="PlayButton" type="Button" parent="Margin/Content/PlayWrap"]
+layout_mode = 2
+custom_minimum_size = Vector2(240, 70)
+size_flags_horizontal = 3
+theme_type_variation = &"PlayButton"
 text = "PLAY"
 
-[node name="ProfileButton" parent="Margin/Content" instance=ExtResource("3_btn")]
-variant = 1
-text = "Profile"
+[node name="RewardsRow" type="HBoxContainer" parent="Margin/Content"]
+layout_mode = 2
+theme_override_constants/separation = 10
+mouse_filter = 2
 
-[node name="ShopButton" parent="Margin/Content" instance=ExtResource("3_btn")]
-variant = 1
-text = "Shop"
+[node name="DailyBanner" parent="Margin/Content/RewardsRow" instance=ExtResource("8_mb")]
+layout_mode = 2
+size_flags_horizontal = 3
+banner_title = "Daily Rewards"
+banner_subtitle = "Loading…"
+banner_color = Color(0.18, 0.5, 0.93, 1)
+banner_icon = &"daily"
 
-[node name="SettingsButton" parent="Margin/Content" instance=ExtResource("3_btn")]
-variant = 1
-text = "Settings"
+[node name="RoyalBanner" parent="Margin/Content/RewardsRow" instance=ExtResource("8_mb")]
+layout_mode = 2
+size_flags_horizontal = 3
+banner_title = "Royal Pass"
+banner_subtitle = "Exclusive rewards & more"
+banner_color = Color(0.75, 0.16, 0.22, 1)
+banner_icon = &"crown"
 
-[node name="FriendsButton" parent="Margin/Content" instance=ExtResource("3_btn")]
-variant = 1
-text = "Friends"
+[node name="FeaturesRow" type="HBoxContainer" parent="Margin/Content"]
+layout_mode = 2
+alignment = 1
+theme_override_constants/separation = 5
+mouse_filter = 2
 
-[node name="InventoryButton" parent="Margin/Content" instance=ExtResource("3_btn")]
-variant = 1
-text = "Inventory"
+[node name="ProfileButton" parent="Margin/Content/FeaturesRow" instance=ExtResource("7_mib")]
+layout_mode = 2
+icon_name = &"profile"
+tile_color = Color(0.61, 0.32, 0.88, 1)
+caption = "Profile"
 
-[node name="HistoryButton" parent="Margin/Content" instance=ExtResource("3_btn")]
-variant = 1
-text = "History"
+[node name="ShopButton" parent="Margin/Content/FeaturesRow" instance=ExtResource("7_mib")]
+layout_mode = 2
+icon_name = &"shop"
+tile_color = Color(0.91, 0.6, 0.16, 1)
+caption = "Shop"
 
-[node name="RankingsButton" parent="Margin/Content" instance=ExtResource("3_btn")]
-variant = 1
-text = "Rankings"
+[node name="SettingsButton" parent="Margin/Content/FeaturesRow" instance=ExtResource("7_mib")]
+layout_mode = 2
+icon_name = &"settings"
+tile_color = Color(0.09, 0.63, 0.63, 1)
+caption = "Settings"
 
-[node name="AdminButton" parent="Margin/Content" instance=ExtResource("3_btn")]
+[node name="FriendsButton" parent="Margin/Content/FeaturesRow" instance=ExtResource("7_mib")]
+layout_mode = 2
+icon_name = &"friends"
+tile_color = Color(0.15, 0.68, 0.38, 1)
+caption = "Friends"
+
+[node name="InventoryButton" parent="Margin/Content/FeaturesRow" instance=ExtResource("7_mib")]
+layout_mode = 2
+icon_name = &"inventory"
+tile_color = Color(0.55, 0.35, 0.85, 1)
+caption = "Inventory"
+
+[node name="HistoryButton" parent="Margin/Content/FeaturesRow" instance=ExtResource("7_mib")]
+layout_mode = 2
+icon_name = &"history"
+tile_color = Color(0.2, 0.55, 0.85, 1)
+caption = "History"
+
+[node name="RankingsButton" parent="Margin/Content/FeaturesRow" instance=ExtResource("7_mib")]
+layout_mode = 2
+icon_name = &"rankings"
+tile_color = Color(0.88, 0.25, 0.22, 1)
+caption = "Rankings"
+
+[node name="AdminButton" parent="Margin/Content/FeaturesRow" instance=ExtResource("7_mib")]
 visible = false
-variant = 1
-text = "Admin"
+layout_mode = 2
+icon_name = &"crown"
+tile_color = Color(0.45, 0.45, 0.5, 1)
+caption = "Admin"
 
-[node name="SpacerBottom" type="Control" parent="Margin/Content"]
-size_flags_vertical = 3
+[node name="BottomNav" type="PanelContainer" parent="Margin/Content"]
+layout_mode = 2
+theme_type_variation = &"MenuPanel"
+mouse_filter = 2
 
-[node name="VersionLabel" type="Label" parent="Margin/Content"]
-theme_type_variation = "Caption"
+[node name="NavRow" type="HBoxContainer" parent="Margin/Content/BottomNav"]
+layout_mode = 2
+alignment = 1
+theme_override_constants/separation = 4
+mouse_filter = 2
+
+[node name="HomeNav" parent="Margin/Content/BottomNav/NavRow" instance=ExtResource("7_mib")]
+layout_mode = 2
+custom_minimum_size = Vector2(62, 56)
+icon_name = &"home"
+tile_color = Color(0.91, 0.71, 0.29, 0.4)
+caption = "Home"
+icon_size = 22
+
+[node name="FriendsNav" parent="Margin/Content/BottomNav/NavRow" instance=ExtResource("7_mib")]
+layout_mode = 2
+custom_minimum_size = Vector2(62, 56)
+icon_name = &"friends"
+tile_color = Color(1, 1, 1, 0.08)
+caption = "Friends"
+icon_size = 22
+
+[node name="LeaderboardNav" parent="Margin/Content/BottomNav/NavRow" instance=ExtResource("7_mib")]
+layout_mode = 2
+custom_minimum_size = Vector2(66, 56)
+icon_name = &"leaderboard"
+tile_color = Color(1, 1, 1, 0.08)
+caption = "Leaderboard"
+icon_size = 22
+
+[node name="ProfileNav" parent="Margin/Content/BottomNav/NavRow" instance=ExtResource("7_mib")]
+layout_mode = 2
+custom_minimum_size = Vector2(62, 56)
+icon_name = &"profile"
+tile_color = Color(1, 1, 1, 0.08)
+caption = "Profile"
+icon_size = 22
+
+[node name="StoreNav" parent="Margin/Content/BottomNav/NavRow" instance=ExtResource("7_mib")]
+layout_mode = 2
+custom_minimum_size = Vector2(62, 56)
+icon_name = &"store"
+tile_color = Color(1, 1, 1, 0.08)
+caption = "Store"
+icon_size = 22
+
+[node name="VersionLabel" type="Label" parent="."]
+layout_mode = 1
+anchors_preset = 3
+anchor_left = 1.0
+anchor_top = 1.0
+anchor_right = 1.0
+anchor_bottom = 1.0
+offset_left = -92.0
+offset_top = -22.0
+offset_right = -8.0
+offset_bottom = -6.0
+grow_horizontal = 0
+grow_vertical = 0
+theme_override_font_sizes/font_size = 10
+theme_override_colors/font_color = Color(1, 1, 1, 0.45)
 text = "v0.1.0"
-horizontal_alignment = 1
+horizontal_alignment = 2
+mouse_filter = 2

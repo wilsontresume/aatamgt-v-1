@@ -31,11 +31,20 @@ class CreateMatchBody {
   @IsIn(['CASUAL', 'RANKED', 'PRIVATE'])
   mode?: 'CASUAL' | 'RANKED' | 'PRIVATE';
 
+  /**
+   * Public match creation never accepts client-supplied stakes — the
+   * matchmaking service is the only path that sets stakeCoins/tierId,
+   * so a forged body cannot move coins.
+   */
   @IsOptional()
   @Type(() => Number)
   @IsInt()
   @Min(0)
   stakeCoins?: number;
+
+  @IsOptional()
+  @IsString()
+  tierId?: string;
 }
 
 class SubmitMoveBody {
@@ -64,7 +73,13 @@ export class MatchesController {
 
   @Post()
   async create(@CurrentUser() auth: AuthUser, @Body() dto: CreateMatchBody) {
-    const match = await this.matches.create(auth.id, dto);
+    if ((dto.stakeCoins ?? 0) !== 0 || dto.tierId) {
+      throw new ForbiddenException('Use matchmaking for tiered matches');
+    }
+    const match = await this.matches.create(auth.id, {
+      gameKey: dto.gameKey,
+      mode: dto.mode,
+    });
     return this.matches.serialize(match);
   }
 

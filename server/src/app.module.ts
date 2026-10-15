@@ -30,7 +30,9 @@ import { CosmeticsModule } from './cosmetics/cosmetics.module';
 import { RankingsModule } from './rankings/rankings.module';
 import { ShopModule } from './shop/shop.module';
 import { AdminModule } from './admin/admin.module';
+import { AnalyticsModule } from './analytics/analytics.module';
 import { SystemConfigModule } from './config/system-config.module';
+import { MatchmakingModule } from './matchmaking/matchmaking.module';
 
 @Module({
   imports: [
@@ -72,6 +74,8 @@ import { SystemConfigModule } from './config/system-config.module';
     RankingsModule,
     ShopModule,
     AdminModule,
+    AnalyticsModule,
+    MatchmakingModule,
   ],
   providers: [
     {

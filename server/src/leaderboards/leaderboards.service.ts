@@ -70,10 +70,13 @@ export class LeaderboardsService {
       by: ['userId'],
       where: {
         result: 'WIN',
+        userId: { not: null },
         match: { gameKey, status: 'COMPLETED' },
       },
       _count: { _all: true },
     });
-    return grouped.map((row) => ({ userId: row.userId, score: row._count._all }));
+    return grouped
+      .filter((row): row is typeof row & { userId: string } => row.userId !== null)
+      .map((row) => ({ userId: row.userId, score: row._count._all }));
   }
 }

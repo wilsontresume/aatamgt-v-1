@@ -7,6 +7,8 @@ const SCREEN_ROOT_NAMES := {
 	&"splash": "SplashScreen",
 	&"main_menu": "MainMenu",
 	&"game_selection": "GameSelection",
+	&"game_entry": "GameEntry",
+	&"friend_challenge": "FriendChallenge",
 	&"profile": "Profile",
 	&"settings": "Settings",
 	&"auth": "AuthScreen",
@@ -89,13 +91,17 @@ func _run() -> void:
 	var screen_container: Control = _main.get_node("ScreenLayer/ScreenContainer")
 	_check(screen_container.theme != null, "theme applied to screen container")
 
-	# --- Splash -> main menu handoff ----------------------------------
+	# --- Splash -> login-first handoff ---------------------------------
 	_check(_app.navigation.current == &"splash", "boots into splash screen")
 	await create_timer(1.9).timeout
-	_check(_app.navigation.current == &"main_menu", "splash auto-advances to main menu")
+	_check(_app.navigation.current == &"auth",
+			"fresh install (no session) lands on the login screen first")
+	_check(_app.navigation.current != &"main_menu",
+			"home never opens before authentication")
 
 	# --- Every screen instantiates with correct root -------------------
-	for screen_id in [&"game_selection", &"profile", &"settings", &"auth",
+	for screen_id in [&"game_selection", &"game_entry", &"friend_challenge",
+			&"profile", &"settings", &"auth",
 			&"aadu_puli", &"solah_seedi", &"nine_mens_morris",
 			&"friends", &"challenge", &"history", &"inventory", &"leaderboard",
 			&"shop", &"admin", &"main_menu"]:
@@ -275,6 +281,12 @@ func _run() -> void:
 	# --- Phase 15: admin dashboard (role-guarded contract) -----------
 	await _test_phase15_admin()
 
+	# --- Phase 16: analytics (privacy-conscious metrics contract) ----
+	_test_phase16_analytics()
+
+	# --- Workflow Change 2: multiplayer-first entry (tiers/queue) ----
+	await _test_workflow2_entry()
+
 	_finish()
 
 
@@ -305,6 +317,160 @@ func _test_phase11_social() -> void:
 			"challenge share text matches the WhatsApp example")
 	_check(msg.contains("\n\nCode: K7M2QX9B"),
 			"challenge share text carries the entry code")
+
+
+## Workflow Change 2 offline contract: PLAY lands on game_entry (not a
+## game screen); matchmaking owns tiers/queue; auto-online hand-off is
+## one-shot with an exact match id.
+func _test_workflow2_entry() -> void:
+	for screen_id in [&"game_entry", &"friend_challenge"]:
+		_check(_app.navigation.has_screen(screen_id),
+				"navigation knows entry screen '%s'" % screen_id)
+	_check(_app.matchmaking is MatchmakingService,
+			"App exposes the MatchmakingService")
+	var mm_methods := []
+	for m in _app.matchmaking.get_method_list():
+		mm_methods.append(str(m.get("name", "")))
+	for required in ["list_tiers", "queue", "status", "cancel_queue",
+			"lookup_player", "set_pending", "take_pending"]:
+		_check(mm_methods.has(required),
+				"MatchmakingService exposes %s" % required)
+	_check(MatchmakingService.game_key_for(&"aadu_puli")
+			== OnlineMatchService.AADU_PULI_KEY,
+			"game_key_for aadu_puli")
+	_check(MatchmakingService.game_key_for(&"solah_seedi")
+			== OnlineMatchService.SOLAH_SEEDI_KEY,
+			"game_key_for solah_seedi")
+	_check(MatchmakingService.game_key_for(&"nine_mens_morris")
+			== OnlineMatchService.NINE_MENS_MORRIS_KEY,
+			"game_key_for nine_mens_morris")
+	_check(MatchmakingService.screen_for_game_key("solah-seedi")
+			== &"solah_seedi", "screen_for_game_key solah-seedi")
+
+	# PLAY navigates to game_entry with the carousel selection.
+	_app.navigation.go(&"main_menu")
+	await _frame()
+	await _frame()
+	var menu: Control = null
+	var screen_container: Control = _main.get_node(
+			"ScreenLayer/ScreenContainer")
+	for child in screen_container.get_children():
+		if child.name == "MainMenu":
+			menu = child
+	if menu == null:
+		_failures += 1
+		printerr("FAIL: main menu not found for PLAY check")
+		return
+	var play_button: Button = menu.get_node(
+			"Margin/Content/PlayWrap/PlayButton")
+	_check(play_button != null, "main menu has a PLAY button")
+	_app.selected_game = &"solah_seedi"
+	play_button.pressed.emit()
+	await _frame()
+	await _frame()
+	_check(_app.navigation.current == &"game_entry",
+			"PLAY opens game_entry (got: %s)" % _app.navigation.current)
+	var entry: Control = null
+	for child in screen_container.get_children():
+		if child.name == "GameEntry":
+			entry = child
+	if entry != null:
+		var title: Label = entry.get_node_or_null(
+				"Margin/Content/TitleBanner/TitleVBox/TitleLabel")
+		_check(title != null and title.text == "Solah Seedi",
+				"game_entry titles the selected game (got: %s)"
+				% (title.text if title else "missing"))
+		var friend_btn: Button = entry.get_node_or_null(
+				"Margin/Content/ActionsRow/FriendButton")
+		var online_btn: Button = entry.get_node_or_null(
+				"Margin/Content/ActionsRow/OnlineButton")
+		_check(friend_btn != null and online_btn != null,
+				"game_entry offers Play with Friend and Play Online")
+		# Tier workflow: actions hidden and no tier pre-selected on entry.
+		var actions_row: Control = entry.get_node_or_null(
+				"Margin/Content/ActionsRow")
+		_check(actions_row != null and not actions_row.visible,
+				"game_entry hides Play actions until a tier is selected")
+		var tier_detail: Label = entry.get_node_or_null(
+				"Margin/Content/TierDetail")
+		_check(tier_detail != null
+				and (tier_detail.text.findn("Select a stake tier") != -1
+				or tier_detail.text.findn("Sign in to play") != -1
+				or tier_detail.text.findn("Loading tiers") != -1
+				or tier_detail.text.findn("Could not load") != -1
+				or tier_detail.text.findn("No tiers") != -1),
+				"game_entry prompts to pick a tier or sign in (got: %s)"
+				% (tier_detail.text if tier_detail else "missing"))
+		# Dynamic tier cards: no FreeButton in the scene; cards come from
+		# the backend. On offline test runs, expect a Retry affordance.
+		var free_btn: Button = entry.get_node_or_null(
+				"Margin/Content/TiersRow/FreeButton")
+		_check(free_btn == null,
+				"game_entry no longer ships a hard-coded Free tier button")
+		var retry_btn: Button = entry.get_node_or_null(
+				"Margin/Content/RetryButton")
+		var tiers_row: HBoxContainer = entry.get_node_or_null(
+				"Margin/Content/TiersRow")
+		if tiers_row != null and actions_row != null and tier_detail != null:
+			if tiers_row.get_child_count() > 0:
+				# Online path: at least one dynamic card, none pre-pressed.
+				var first_btn: Button = tiers_row.get_child(0)
+				_check(not first_btn.button_pressed,
+						"game_entry does not pre-select any tier button")
+				first_btn.pressed.emit()
+				await _frame()
+				_check(actions_row.visible,
+						"selecting a tier reveals Play actions")
+				_check(not tier_detail.text.is_empty(),
+						"tier detail shows selection copy")
+			else:
+				# Offline / signed-out path: no fabricated Free fallback.
+				# When signed out, Retry stays hidden and the sign-in prompt
+				# is shown; when signed in but load fails, Retry appears.
+				if _app.auth.is_authenticated():
+					_check(retry_btn != null and retry_btn.visible,
+							"game_entry shows Retry when tiers fail to load")
+				else:
+					_check(retry_btn == null or not retry_btn.visible,
+							"Retry hidden while signed out")
+				_check(not actions_row.visible,
+						"Play actions stay hidden on tier load failure")
+				_check(free_btn == null,
+						"no fabricated Free tier on network failure")
+	else:
+		_failures += 1
+		printerr("FAIL: game_entry screen not found after PLAY")
+
+	# Auto-online hand-off is one-shot and carries the match id.
+	_app.online.request_auto_online("match-abc")
+	_check(_app.online.consume_auto_online(), "auto-online flag consumes once")
+	_check(not _app.online.consume_auto_online(), "auto-online flag is one-shot")
+	_check(_app.online.take_auto_match_id() == "match-abc",
+			"take_auto_match_id returns the handed-off id")
+	_check(_app.online.take_auto_match_id() == "",
+			"take_auto_match_id is one-shot")
+	_app.online.request_auto_online("match-xyz")
+	_check(_app.online.consume_auto_online(), "auto-online re-arms")
+	_check(_app.online.take_auto_match_id() == "match-xyz",
+			"take_auto_match_id returns the second hand-off")
+
+	# Friend challenge pending hand-off.
+	_app.matchmaking.set_pending({
+		"game_key": OnlineMatchService.NINE_MENS_MORRIS_KEY,
+		"tier_id": "bronze",
+	})
+	var pending: Dictionary = _app.matchmaking.take_pending()
+	_check(pending.get("tier_id", "") == "bronze",
+			"matchmaking pending carries the tier")
+	_check(_app.matchmaking.take_pending().is_empty(),
+			"matchmaking pending is one-shot")
+
+	# SocialService accepts a tier on create_challenge (signature only).
+	var social_methods := []
+	for m in _app.social.get_method_list():
+		social_methods.append(str(m.get("name", "")))
+	_check(social_methods.has("create_challenge"),
+			"SocialService still exposes create_challenge")
 
 
 ## Phase 12 cosmetic inventory contract: the client renders the
@@ -450,7 +616,7 @@ func _test_phase14_ranking() -> void:
 	# Main menu entry + profile rank display section.
 	var menu_scene: PackedScene = load("res://scenes/screens/main_menu.tscn")
 	var menu: Control = menu_scene.instantiate()
-	_check(menu.get_node_or_null("Margin/Content/RankingsButton") != null,
+	_check(menu.get_node_or_null("Margin/Content/FeaturesRow/RankingsButton") != null,
 			"main menu offers a Rankings button")
 	menu.free()
 	var profile_scene: PackedScene = load("res://scenes/screens/profile.tscn")
@@ -537,7 +703,7 @@ func _test_phase13_iap() -> void:
 	# Main menu offers the Shop; the screen wires its real controls.
 	var menu_scene: PackedScene = load("res://scenes/screens/main_menu.tscn")
 	var menu: Control = menu_scene.instantiate()
-	_check(menu.get_node_or_null("Margin/Content/ShopButton") != null,
+	_check(menu.get_node_or_null("Margin/Content/FeaturesRow/ShopButton") != null,
 			"main menu offers a Shop button")
 	menu.free()
 	var shop_scene: PackedScene = load("res://scenes/screens/shop.tscn")
@@ -625,7 +791,7 @@ func _test_phase15_admin() -> void:
 	var menu_scene: PackedScene = load("res://scenes/screens/main_menu.tscn")
 	var menu: Control = menu_scene.instantiate()
 	var admin_button: Button = menu.get_node_or_null(
-			"Margin/Content/AdminButton")
+			"Margin/Content/FeaturesRow/AdminButton")
 	_check(admin_button != null, "main menu offers an Admin button")
 	_check(admin_button != null and not admin_button.visible,
 			"Admin button stays hidden by default")
@@ -672,6 +838,58 @@ func _test_phase15_admin() -> void:
 	_check(not config.ok, "signed-out config read reports failure")
 	var audit: Dictionary = await _app.admin.audit_log()
 	_check(not audit.ok, "signed-out audit read reports failure")
+
+
+## Phase 16 analytics contract: opt-out by default-on with a local
+## toggle, a random installId that is never derived from the device,
+## no PII fields, and a session that reports its duration.
+func _test_phase16_analytics() -> void:
+	_check(_app.analytics is AnalyticsService, "App exposes the AnalyticsService")
+	_check(_app.analytics.is_enabled(), "analytics is enabled by default")
+
+	var install_id := str(_app.analytics._install_id)
+	_check(not install_id.is_empty(), "installId is generated at session start")
+	_check(install_id.length() == 36, "installId is a UUID (36 chars)")
+	var uuid := RegEx.new()
+	uuid.compile("^[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-"
+			+ "[0-9a-fA-F]{4}-[0-9a-fA-F]{12}$")
+	_check(uuid.search(install_id) != null, "installId matches the UUID shape")
+
+	var session_id := str(_app.analytics._session_id)
+	_check(not session_id.is_empty() and session_id != install_id,
+			"sessionId is distinct from the installId")
+
+	# No identity fields: the event payload never carries email or name.
+	_app.analytics.track("session_start", {"probe": true})
+	var queued: Array = _app.analytics._queue
+	_check(queued.size() > 0, "tracked events enter the queue")
+	var last: Dictionary = queued[queued.size() - 1]
+	_check(not last.has("email") and not last.has("username")
+			and not last.has("device") and not last.has("ip"),
+			"events carry no PII fields")
+	_check(str(last.get("sessionId", "")) == session_id,
+			"events are stamped with the session id")
+
+	# Opt-out drops the queue and stops collection immediately.
+	var previous: Array = _app.analytics._queue.duplicate()
+	_app.analytics.set_enabled(false)
+	_check(not _app.analytics.is_enabled(), "analytics can be opted out")
+	_app.analytics.track("session_start")
+	_check(_app.analytics._queue.is_empty(), "opt-out clears the queue")
+	_app.analytics.set_enabled(true)
+	_check(_app.analytics.is_enabled(), "analytics can be re-enabled")
+	for item in previous:
+		_app.analytics._queue.append(item)
+
+	var methods := []
+	for m in _app.analytics.get_method_list():
+		methods.append(str(m.get("name", "")))
+	for required in ["track", "flush", "start_session", "end_session",
+			"set_enabled", "is_enabled", "on_session_changed"]:
+		_check(methods.has(required), "AnalyticsService exposes %s" % required)
+	for forbidden in ["send_email", "set_user", "identify", "set_device_id"]:
+		_check(not methods.has(forbidden),
+				"no identity API '%s'" % forbidden)
 
 
 ## Phase 7 offline contract: the client can only OBSERVE the coin

@@ -1,6 +1,7 @@
-[gd_scene load_steps=5 format=3]
+[gd_scene load_steps=6 format=3]
 
 [ext_resource type="Script" path="res://src/core/main.gd" id="1_main"]
+[ext_resource type="Script" path="res://src/ui/theme/app_background.gd" id="5_bg"]
 [ext_resource type="PackedScene" path="res://scenes/components/loading_indicator.tscn" id="2_load"]
 [ext_resource type="PackedScene" path="res://scenes/components/error_dialog.tscn" id="3_err"]
 [ext_resource type="PackedScene" path="res://scenes/components/confirm_dialog.tscn" id="4_conf"]
@@ -16,12 +17,15 @@ anchor_bottom = 1.0
 grow_horizontal = 2
 grow_vertical = 2
 
-[node name="Background" type="ColorRect" parent="ScreenLayer/ScreenContainer"]
+[node name="Background" type="Control" parent="ScreenLayer/ScreenContainer"]
+layout_mode = 1
+anchors_preset = 15
 anchor_right = 1.0
 anchor_bottom = 1.0
 grow_horizontal = 2
 grow_vertical = 2
-color = Color(0.051, 0.067, 0.09, 1)
+mouse_filter = 2
+script = ExtResource("5_bg")
 
 [node name="DialogLayer" type="CanvasLayer" parent="."]
 layer = 10
@@ -31,6 +35,7 @@ anchor_right = 1.0
 anchor_bottom = 1.0
 grow_horizontal = 2
 grow_vertical = 2
+mouse_filter = 2
 
 [node name="LoadingCenter" type="CenterContainer" parent="DialogLayer/DialogRoot"]
 anchor_right = 1.0

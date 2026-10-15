@@ -38,9 +38,37 @@ const GAMES = [
 
 const DEV_PASSWORD = process.env.SEED_PASSWORD ?? 'Password123!';
 
+/**
+ * Backend-managed virtual-coin tiers (product-approved 2026-10-14).
+ * Reward payout stays multiplier-based: winner receives
+ * floor(entryCostCoins × rewardMultiplierBp / 10000) on match finalize
+ * (MatchesService.creditMatchRewards). Seeded multipliers yield the
+ * documented winner payouts: Bronze 50→62, Silver 100→200, Gold 500→1500.
+ * No free tier is seeded — admins can add one via POST /admin/tiers.
+ */
+const TIERS = [
+  { id: 'bronze', name: 'Bronze', entryCostCoins: 50, rewardMultiplierBp: 12_500, displayOrder: 1 },
+  { id: 'silver', name: 'Silver', entryCostCoins: 100, rewardMultiplierBp: 20_000, displayOrder: 2 },
+  { id: 'gold', name: 'Gold', entryCostCoins: 500, rewardMultiplierBp: 30_000, displayOrder: 3 },
+] as const;
+
 export async function seed(prisma: PrismaClient): Promise<void> {
   if (process.env.NODE_ENV === 'production') {
     throw new Error('Refusing to seed a production database');
+  }
+
+  for (const tier of TIERS) {
+    await prisma.tier.upsert({
+      where: { id: tier.id },
+      update: {
+        name: tier.name,
+        entryCostCoins: tier.entryCostCoins,
+        rewardMultiplierBp: tier.rewardMultiplierBp,
+        displayOrder: tier.displayOrder,
+        active: true,
+      },
+      create: { ...tier, gameKey: null, active: true },
+    });
   }
 
   for (const game of GAMES) {

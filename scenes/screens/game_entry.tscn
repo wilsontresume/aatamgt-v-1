@@ -1,0 +1,164 @@
+[gd_scene load_steps=3 format=3]
+
+[ext_resource type="Script" path="res://src/ui/screens/game_entry.gd" id="1_ge"]
+[ext_resource type="PackedScene" path="res://scenes/components/top_bar.tscn" id="2_tb"]
+
+[node name="GameEntry" type="Control"]
+anchor_right = 1.0
+anchor_bottom = 1.0
+grow_horizontal = 2
+grow_vertical = 2
+script = ExtResource("1_ge")
+
+[node name="Margin" type="MarginContainer" parent="."]
+anchor_right = 1.0
+anchor_bottom = 1.0
+grow_horizontal = 2
+grow_vertical = 2
+theme_override_constants/margin_left = 20
+theme_override_constants/margin_top = 16
+theme_override_constants/margin_right = 20
+theme_override_constants/margin_bottom = 20
+
+[node name="Content" type="VBoxContainer" parent="Margin"]
+theme_override_constants/separation = 12
+
+[node name="TopBar" parent="Margin/Content" instance=ExtResource("2_tb")]
+title = ""
+show_back = true
+show_coins = false
+
+[node name="TitleBanner" type="PanelContainer" parent="Margin/Content"]
+theme_type_variation = "WoodBanner"
+size_flags_horizontal = 1
+
+[node name="TitleVBox" type="VBoxContainer" parent="Margin/Content/TitleBanner"]
+theme_override_constants/separation = 2
+
+[node name="TitleLabel" type="Label" parent="Margin/Content/TitleBanner/TitleVBox"]
+theme_type_variation = "TitleLarge"
+theme_override_colors/font_color = Color(1, 0.84, 0.42, 1)
+theme_override_constants/shadow_offset_x = 0
+theme_override_constants/shadow_offset_y = 3
+text = "Game"
+horizontal_alignment = 1
+
+[node name="GameRulesButton" type="Button" parent="Margin/Content"]
+size_flags_horizontal = 8
+theme_type_variation = "SecondaryButton"
+text = "i  Game Rules"
+
+[node name="CoinsPanel" type="PanelContainer" parent="Margin/Content"]
+theme_type_variation = "OrnamentPanel"
+size_flags_horizontal = 1
+
+[node name="CoinsHBox" type="HBoxContainer" parent="Margin/Content/CoinsPanel"]
+theme_override_constants/separation = 10
+alignment = 1
+
+[node name="CoinsVBox" type="VBoxContainer" parent="Margin/Content/CoinsPanel/CoinsHBox"]
+theme_override_constants/separation = 0
+alignment = 1
+
+[node name="YourCoinsLabel" type="Label" parent="Margin/Content/CoinsPanel/CoinsHBox/CoinsVBox"]
+theme_type_variation = "Caption"
+text = "Your Coins"
+horizontal_alignment = 1
+
+[node name="CoinsLabel" type="Label" parent="Margin/Content/CoinsPanel/CoinsHBox/CoinsVBox"]
+theme_type_variation = "ValueBig"
+text = "0 coins"
+horizontal_alignment = 1
+
+[node name="TierBanner" type="PanelContainer" parent="Margin/Content"]
+theme_type_variation = "WoodBanner"
+size_flags_horizontal = 1
+
+[node name="TierBannerVBox" type="VBoxContainer" parent="Margin/Content/TierBanner"]
+theme_override_constants/separation = 2
+
+[node name="TierBannerTitle" type="Label" parent="Margin/Content/TierBanner/TierBannerVBox"]
+theme_type_variation = "Heading"
+theme_override_colors/font_color = Color(1, 0.84, 0.42, 1)
+text = "Select Game Tier"
+horizontal_alignment = 1
+
+[node name="TierBannerHint" type="Label" parent="Margin/Content/TierBanner/TierBannerVBox"]
+theme_type_variation = "Caption"
+theme_override_colors/font_color = Color(1, 0.95, 0.85, 0.85)
+text = "Higher entry = Higher rewards!"
+horizontal_alignment = 1
+
+[node name="TiersRow" type="HBoxContainer" parent="Margin/Content"]
+theme_override_constants/separation = 10
+alignment = 1
+
+[node name="TierDetail" type="Label" parent="Margin/Content"]
+theme_type_variation = "Heading"
+text = "Select a stake tier to continue"
+horizontal_alignment = 1
+autowrap_mode = 2
+
+[node name="RetryButton" type="Button" parent="Margin/Content"]
+visible = false
+size_flags_horizontal = 1
+theme_type_variation = "PrimaryButton"
+text = "Retry loading tiers"
+
+[node name="PlayWithLabel" type="Label" parent="Margin/Content"]
+visible = false
+theme_type_variation = "SectionTitle"
+text = "— Play with —"
+horizontal_alignment = 1
+
+[node name="ActionsRow" type="HBoxContainer" parent="Margin/Content"]
+visible = false
+theme_override_constants/separation = 12
+
+[node name="FriendButton" type="Button" parent="Margin/Content/ActionsRow"]
+size_flags_horizontal = 3
+custom_minimum_size = Vector2(0, 110)
+theme_type_variation = "ActionGreenBtn"
+text = "Play with Friend
+Challenge your friends"
+
+[node name="OnlineButton" type="Button" parent="Margin/Content/ActionsRow"]
+size_flags_horizontal = 3
+custom_minimum_size = Vector2(0, 110)
+theme_type_variation = "ActionBlueBtn"
+text = "Play Online
+Find a real player or AI"
+
+[node name="AiNotePanel" type="PanelContainer" parent="Margin/Content"]
+theme_type_variation = "OrnamentPanel"
+size_flags_horizontal = 1
+
+[node name="AiNoteLabel" type="Label" parent="Margin/Content/AiNotePanel"]
+theme_type_variation = "Caption"
+theme_override_colors/font_color = Color(1, 0.95, 0.85, 0.9)
+text = "If no online player is available, you will be matched with an AI opponent (Guest + 5 letters)."
+horizontal_alignment = 1
+autowrap_mode = 2
+
+[node name="StatusLabel" type="Label" parent="Margin/Content"]
+theme_type_variation = "Caption"
+text = ""
+
+[node name="QueuePanel" type="PanelContainer" parent="Margin/Content"]
+visible = false
+theme_type_variation = "Card"
+size_flags_horizontal = 1
+
+[node name="QueueVBox" type="VBoxContainer" parent="Margin/Content/QueuePanel"]
+theme_override_constants/separation = 10
+
+[node name="QueueLabel" type="Label" parent="Margin/Content/QueuePanel/QueueVBox"]
+text = "Searching for an opponent…"
+horizontal_alignment = 1
+
+[node name="CancelButton" type="Button" parent="Margin/Content/QueuePanel/QueueVBox"]
+theme_type_variation = "DangerButton"
+text = "Cancel search"
+
+[node name="Spacer" type="Control" parent="Margin/Content"]
+size_flags_vertical = 3

@@ -34,11 +34,13 @@ theme_type_variation = "Dialog"
 theme_override_constants/separation = 16
 
 [node name="TitleLabel" type="Label" parent="Center/Panel/Body"]
+custom_minimum_size = Vector2(400, 0)
 theme_type_variation = "Heading"
 autowrap_mode = 3
 text = "Confirm"
 
 [node name="MessageLabel" type="Label" parent="Center/Panel/Body"]
+custom_minimum_size = Vector2(400, 0)
 theme_type_variation = "Body"
 autowrap_mode = 3
 text = ""
