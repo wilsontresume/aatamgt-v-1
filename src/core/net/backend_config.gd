@@ -10,10 +10,9 @@ extends RefCounted
 ##  - No credentials, tokens, or secrets are ever stored here; tokens
 ##    live only in the AuthService session file.
 
-## Development default: the locally hosted NestJS backend over TLS
-## (server/scripts/dev-cert.sh). Production builds override this via
-## AATAMGT_API_URL.
-const DEFAULT_BASE_URL := "https://127.0.0.1:3443"
+## Default: the Cloudflare tunnel to the hosted NestJS backend.
+## Local development overrides via AATAMGT_API_URL (e.g. https://127.0.0.1:3443).
+const DEFAULT_BASE_URL := "https://sent-cloth-trends-fit.trycloudflare.com"
 
 const ENV_BASE_URL := "AATAMGT_API_URL"
 const ENV_CA_CERT := "AATAMGT_CA_CERT"
@@ -32,13 +31,15 @@ static func resolve_base_url() -> String:
 ##
 ## On device, OS.get_environment cannot be set per-app, so debug builds
 ## fall back to the bundled dev certificate (server/scripts/dev-cert.sh)
-## — the same cert desktop e2e passes via AATAMGT_CA_CERT. Release
-## builds never resolve a path here: they use the platform store only.
+## — the same cert desktop e2e passes via AATAMGT_CA_CERT — but only
+## when the resolved backend is a loopback dev server. Remote backends
+## (Cloudflare tunnel, production) use the platform certificate store.
+## Release builds never resolve a path here: they use the platform store only.
 static func ca_cert_path() -> String:
 	var from_env := OS.get_environment(ENV_CA_CERT).strip_edges()
 	if not from_env.is_empty():
 		return from_env
-	if OS.is_debug_build():
+	if OS.is_debug_build() and _host(resolve_base_url()).to_lower() in LOOPBACK_HOSTS:
 		const DEV_CERT := "res://server/dev-certs/dev-cert.pem"
 		if FileAccess.file_exists(DEV_CERT):
 			return DEV_CERT
