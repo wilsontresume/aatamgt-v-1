@@ -4,6 +4,7 @@ import { FormsModule } from '@angular/forms';
 import { ActivatedRoute, RouterLink } from '@angular/router';
 import { HttpClient, HttpParams } from '@angular/common/http';
 import { AuthService } from '../core/auth.service';
+import { serverMessage } from '../core/http-error';
 import {
   ModerationNote,
   Paginated,
@@ -284,7 +285,7 @@ export class UserDetailPage implements OnInit {
   private handleActionError(err: { status?: number; message?: string }): void {
     this.actionBusy.set(false);
     if (err?.status === 400) {
-      this.actionError.set(err.message || 'The request was rejected. Check the values and retry.');
+      this.actionError.set(serverMessage(err) || 'The request was rejected. Check the values and retry.');
     } else if (err?.status === 401) {
       this.actionError.set('Your session has expired. Sign in again.');
     } else if (err?.status === 403) {
@@ -292,7 +293,7 @@ export class UserDetailPage implements OnInit {
     } else if (err?.status === 404) {
       this.actionError.set('This player no longer exists.');
     } else if (err?.status === 409) {
-      this.actionError.set(err.message || 'Conflict — the change was blocked.');
+      this.actionError.set(serverMessage(err) || 'Conflict — the change was blocked.');
     } else {
       this.actionError.set('Could not reach the server. Nothing was changed — retry.');
     }
@@ -319,7 +320,7 @@ export class UserDetailPage implements OnInit {
         },
         error: (err: { status?: number; message?: string }) => {
           if (err?.status === 400) {
-            this.noteError.set(err.message || 'The note was rejected.');
+            this.noteError.set(serverMessage(err) || 'The note was rejected.');
           } else if (err?.status === 401) {
             this.noteError.set('Your session has expired. Sign in again.');
           } else if (err?.status === 403) {

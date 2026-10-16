@@ -4,6 +4,7 @@ import { FormsModule } from '@angular/forms';
 import { RouterLink } from '@angular/router';
 import { HttpClient, HttpParams } from '@angular/common/http';
 import { AdminUser, Paginated } from '../core/models';
+import { serverMessage } from '../core/http-error';
 
 type LoadState = 'loading' | 'ready' | 'error';
 
@@ -62,7 +63,7 @@ export class UserListPage implements OnInit {
         } else if (err?.status === 403) {
           this.errorMessage.set('You do not have permission to view users.');
         } else if (err?.status === 400) {
-          this.errorMessage.set(err.message || 'Invalid filter values.');
+          this.errorMessage.set(serverMessage(err) || 'Invalid filter values.');
         } else {
           this.errorMessage.set('Could not reach the server. Check the backend and retry.');
         }
