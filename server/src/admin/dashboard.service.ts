@@ -1,6 +1,7 @@
-import { BadRequestException, Injectable, NotFoundException } from '@nestjs/common';
+import { Injectable, NotFoundException } from '@nestjs/common';
 import { Prisma } from '@prisma/client';
 import { PrismaService } from '../prisma/prisma.service';
+import { eachDay, resolveRange } from '../common/date-range';
 
 export interface DashboardQuery {
   from?: string;
@@ -8,40 +9,8 @@ export interface DashboardQuery {
   gameKey?: string;
 }
 
-const DAY_MS = 86_400_000;
-const DEFAULT_RANGE_DAYS = 14;
-const MAX_RANGE_DAYS = 366;
 const RECENT_LIMIT = 6;
 const TOP_GAMES_LIMIT = 10;
-
-function utcToday(): string {
-  return new Date().toISOString().slice(0, 10);
-}
-
-function parseDay(value: string, field: string): Date {
-  const parsed = new Date(`${value}T00:00:00.000Z`);
-  if (Number.isNaN(parsed.getTime()) || parsed.toISOString().slice(0, 10) !== value) {
-    throw new BadRequestException(`\`${field}\` must be a valid YYYY-MM-DD date`);
-  }
-  return parsed;
-}
-
-function shiftDays(day: string, deltaDays: number): string {
-  const parsed = parseDay(day, 'day');
-  return new Date(parsed.getTime() + deltaDays * DAY_MS).toISOString().slice(0, 10);
-}
-
-/** Iterates every UTC day of [from, to] inclusive. */
-function eachDay(from: string, to: string): string[] {
-  const days: string[] = [];
-  let cursor = parseDay(from, 'from');
-  const end = parseDay(to, 'to');
-  while (cursor.getTime() <= end.getTime()) {
-    days.push(cursor.toISOString().slice(0, 10));
-    cursor = new Date(cursor.getTime() + DAY_MS);
-  }
-  return days;
-}
 
 /**
  * Admin dashboard aggregation. Every number is read from the database in
@@ -52,18 +21,7 @@ export class AdminDashboardService {
   constructor(private readonly prisma: PrismaService) {}
 
   async summary(query: DashboardQuery, actorRole: string) {
-    const to = query.to ?? utcToday();
-    const from = query.from ?? shiftDays(to, -(DEFAULT_RANGE_DAYS - 1));
-    const fromDate = parseDay(from, 'from');
-    const toDate = parseDay(to, 'to');
-    if (fromDate.getTime() > toDate.getTime()) {
-      throw new BadRequestException('`from` must be on or before `to`');
-    }
-    if (toDate.getTime() - fromDate.getTime() > (MAX_RANGE_DAYS - 1) * DAY_MS) {
-      throw new BadRequestException(`Date range cannot exceed ${MAX_RANGE_DAYS} days`);
-    }
-    const start = fromDate;
-    const endExclusive = new Date(toDate.getTime() + DAY_MS);
+    const { from, to, start, endExclusive } = resolveRange(query);
     const gameKey = query.gameKey?.trim() ? query.gameKey.trim() : undefined;
     if (gameKey) {
       const game = await this.prisma.game.findUnique({ where: { key: gameKey } });

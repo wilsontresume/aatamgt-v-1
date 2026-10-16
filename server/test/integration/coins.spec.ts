@@ -164,7 +164,7 @@ describe('Virtual coins (Phase 7)', () => {
       const adjust = await request(app.getHttpServer())
         .post(`${apiPrefix(app)}/admin/wallets/${user.id}/adjust`)
         .set(auth(adminToken))
-        .send({ amount: -5000, memo: 'should never land' });
+        .send({ amount: -5000, reason: 'should never land' });
       expect(adjust.status).toBe(422);
 
       const balance = await request(app.getHttpServer())
@@ -186,7 +186,7 @@ describe('Virtual coins (Phase 7)', () => {
       const adjust = await request(app.getHttpServer())
         .post(`${apiPrefix(app)}/admin/wallets/${user.id}/adjust`)
         .set(auth(adminToken))
-        .send({ amount: -400, memo: 'phase 7 clawback' });
+        .send({ amount: -400, reason: 'phase 7 clawback' });
       expect(adjust.status).toBe(201);
       expect(adjust.body.balance).toBe(600);
 
@@ -251,7 +251,7 @@ describe('Virtual coins (Phase 7)', () => {
       await request(app.getHttpServer())
         .post(`${apiPrefix(app)}/admin/wallets/${user.id}/adjust`)
         .set(auth(adminToken))
-        .send({ amount: -200, memo: 'phase 7 mix' });
+        .send({ amount: -200, reason: 'phase 7 mix' });
 
       const integrity = await request(app.getHttpServer())
         .get(`${apiPrefix(app)}/wallet/integrity`)

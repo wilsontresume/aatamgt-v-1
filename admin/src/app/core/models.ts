@@ -206,3 +206,62 @@ export interface RoleChangeResult {
   role: 'USER' | 'MODERATOR' | 'ADMIN';
   sessionsRevoked: number;
 }
+
+// --- Phase D: economy management --------------------------------------------
+
+export interface ConfigEntry {
+  key: string;
+  label: string;
+  kind: 'int' | 'bool';
+  min: number | null;
+  max: number | null;
+  value: number | boolean;
+  default: number | boolean;
+  overridden: boolean;
+}
+
+export interface EconomySummary {
+  circulation: { coins: number; locked: number; wallets: number };
+  coinsIssued: number;
+  coinsSpent: number;
+  transactions: number;
+  rewardedAds: {
+    sessions: number;
+    redeemed: number;
+    coinsGranted: number;
+    grants: number;
+  };
+  purchases: { count: number; byState: Record<string, number> };
+}
+
+export interface EconomyTx {
+  id: string;
+  userId: string;
+  username: string;
+  amount: number;
+  balanceAfter: number;
+  type: string;
+  memo: string | null;
+  createdAt: string;
+}
+
+export interface EconomyTrendPoint {
+  day: string;
+  issued: number;
+  spent: number;
+  net: number;
+  transactions: number;
+}
+
+export interface EconomyTrends {
+  range: { from: string; to: string };
+  points: EconomyTrendPoint[];
+}
+
+export interface AdjustResult {
+  balance: number;
+  transactionId: string;
+  amount: number;
+  replayed: boolean;
+  large: boolean;
+}

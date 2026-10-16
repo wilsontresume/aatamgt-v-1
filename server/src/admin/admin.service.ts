@@ -1,6 +1,7 @@
 import {
   BadRequestException,
   ConflictException,
+  ForbiddenException,
   Injectable,
   NotFoundException,
 } from '@nestjs/common';
@@ -8,6 +9,7 @@ import { CosmeticCategory, MatchResult, Prisma, Role, UserStatus, WalletTxType }
 import { PrismaService } from '../prisma/prisma.service';
 import { WalletService } from '../wallet/wallet.service';
 import { SystemConfigService } from '../config/system-config.service';
+import { eachDay, resolveRange } from '../common/date-range';
 import { PaginationQuery, Paginated } from '../common/dto/pagination.query';
 
 export interface PlayerResultInput {
@@ -339,9 +341,34 @@ export class AdminService {
     return updated;
   }
 
-  async adjustWallet(actorId: string, userId: string, amount: number, memo?: string) {
+  /**
+   * Signed wallet adjustment. A reason is always required and lands in the
+   * ledger memo and the audit entry. Adjustments whose absolute size reaches
+   * the configurable `admin.wallet_adjust_threshold` are restricted to
+   * administrators — moderators may only make small corrections. Duplicate
+   * requests replay safely through `idempotencyKey`.
+   */
+  async adjustWallet(
+    actorId: string,
+    actorRole: string,
+    userId: string,
+    amount: number,
+    reason: string,
+    idempotencyKey?: string,
+  ) {
     if (!Number.isInteger(amount) || amount === 0) {
       throw new BadRequestException('amount must be a non-zero integer');
+    }
+    const trimmed = (reason ?? '').trim();
+    if (!trimmed) {
+      throw new BadRequestException('A reason is required for wallet adjustments');
+    }
+    const threshold = await this.systemConfig.number('admin.wallet_adjust_threshold');
+    const large = Math.abs(amount) >= threshold;
+    if (large && actorRole !== 'ADMIN') {
+      throw new ForbiddenException(
+        `Wallet adjustments of ${threshold.toLocaleString('en-US')} coins or more are restricted to administrators`,
+      );
     }
     const result = await this.wallet.apply({
       userId,
@@ -349,14 +376,22 @@ export class AdminService {
       type: 'ADMIN_ADJUSTMENT',
       refType: 'admin',
       refId: actorId,
-      memo,
-      idempotencyKey: undefined,
+      memo: trimmed,
+      idempotencyKey,
     });
-    await this.audit(actorId, 'wallet.adjust', 'user', userId, { amount, memo });
+    if (!result.replayed) {
+      await this.audit(actorId, 'wallet.adjust', 'user', userId, {
+        amount,
+        reason: trimmed,
+        large,
+      });
+    }
     return {
       balance: result.wallet.balance,
       transactionId: result.transaction.id,
       amount,
+      replayed: result.replayed,
+      large,
     };
   }
 
@@ -479,15 +514,34 @@ export class AdminService {
     });
     const adSessions = this.prisma.adSession.count();
     const adRedeemed = this.prisma.adSession.count({ where: { status: 'REDEEMED' } });
+    const circulation = this.prisma.wallet.aggregate({
+      where: { currency: 'COIN' },
+      _sum: { balance: true, lockedBalance: true },
+      _count: { _all: true },
+    });
     const purchases = await this.prisma.purchase.groupBy({ by: ['state'], _count: true });
-    const [txTotal, issuedAgg, spentAgg, rewarded, rewardedSum, sessions, redeemed] =
-      await Promise.all([txCount, issued, spent, rewardedCount, rewardedCoins, adSessions, adRedeemed]);
+    const [txTotal, issuedAgg, spentAgg, rewarded, rewardedSum, sessions, redeemed, circ] =
+      await Promise.all([
+        txCount,
+        issued,
+        spent,
+        rewardedCount,
+        rewardedCoins,
+        adSessions,
+        adRedeemed,
+        circulation,
+      ]);
 
     const byState: Record<string, number> = {};
     for (const row of purchases) byState[row.state] = row._count;
     const purchaseTotal = purchases.reduce((sum, row) => sum + row._count, 0);
 
     return {
+      circulation: {
+        coins: circ._sum.balance ?? 0,
+        locked: circ._sum.lockedBalance ?? 0,
+        wallets: circ._count._all,
+      },
       coinsIssued: issuedAgg._sum.amount ?? 0,
       coinsSpent: Math.abs(spentAgg._sum.amount ?? 0),
       transactions: txTotal,
@@ -502,11 +556,16 @@ export class AdminService {
   }
 
   async economyTransactions(
-    query: PaginationQuery & { userId?: string; type?: string },
+    query: PaginationQuery & { userId?: string; type?: string; from?: string; to?: string },
   ): Promise<Paginated<unknown>> {
+    const range =
+      query.from || query.to
+        ? resolveRange({ from: query.from, to: query.to })
+        : null;
     const where: Prisma.WalletTransactionWhereInput = {
       ...(query.userId ? { wallet: { userId: query.userId } } : {}),
       ...(query.type ? { type: query.type as WalletTxType } : {}),
+      ...(range ? { createdAt: { gte: range.start, lt: range.endExclusive } } : {}),
     };
     const [rows, total] = await Promise.all([
       this.prisma.walletTransaction.findMany({
@@ -533,6 +592,39 @@ export class AdminService {
       limit: query.limit,
       total,
     };
+  }
+
+  /**
+   * Daily issued/spent/net coin flows for the trends chart. Zero-filled for
+   * every day of the range so gaps mean "no activity", not missing rows.
+   */
+  async economyTrends(query: { from?: string; to?: string }) {
+    const { from, to, start, endExclusive } = resolveRange(query);
+    const rows = await this.prisma.$queryRaw<
+      { day: string; issued: bigint; spent: bigint; n: bigint }[]
+    >`
+      SELECT DATE_FORMAT(createdAt, '%Y-%m-%d') AS day,
+             COALESCE(SUM(CASE WHEN amount > 0 THEN amount ELSE 0 END), 0) AS issued,
+             COALESCE(SUM(CASE WHEN amount < 0 THEN -amount ELSE 0 END), 0) AS spent,
+             COUNT(*) AS n
+      FROM WalletTransaction
+      WHERE createdAt >= ${start} AND createdAt < ${endExclusive}
+      GROUP BY DATE_FORMAT(createdAt, '%Y-%m-%d')
+      ORDER BY day ASC`;
+    const byDay = new Map(rows.map((row) => [row.day, row]));
+    const points = eachDay(from, to).map((day) => {
+      const row = byDay.get(day);
+      const issued = Number(row?.issued ?? 0);
+      const spent = Number(row?.spent ?? 0);
+      return {
+        day,
+        issued,
+        spent,
+        net: issued - spent,
+        transactions: Number(row?.n ?? 0),
+      };
+    });
+    return { range: { from, to }, points };
   }
 
   async economyAdShows(query: PaginationQuery): Promise<Paginated<unknown>> {

@@ -99,6 +99,14 @@ export const CONFIG_KEYS: ConfigKeySpec[] = [
     kind: 'bool',
     envDefault: () => true,
   },
+  {
+    key: 'admin.wallet_adjust_threshold',
+    label: 'Large wallet adjustment threshold (coins)',
+    kind: 'int',
+    min: 1,
+    max: 1_000_000,
+    envDefault: () => 100_000,
+  },
 ];
 
 const BY_KEY = new Map(CONFIG_KEYS.map((spec) => [spec.key, spec]));

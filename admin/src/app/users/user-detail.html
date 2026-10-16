@@ -218,6 +218,138 @@
             <span class="muted">No wallets.</span>
           }
         </div>
+
+        @if (canAdjust && !adjustOpen()) {
+          <div class="wallet-actions">
+            <button class="ghost" (click)="openAdjust()">Adjust coins</button>
+            <span class="muted">Coins are virtual — no cash-out value.</span>
+          </div>
+        }
+
+        @if (adjustOpen()) {
+          <div class="wallet-actions">
+            <button class="ghost" (click)="cancelAdjust()" [disabled]="adjustBusy()">Close</button>
+          </div>
+          <div class="adjust-form" role="group" aria-label="Wallet adjustment">
+            @if (adjustReview(); as review) {
+              <div class="confirm">
+                <p class="confirm-title">
+                  Apply
+                  {{ review.amount > 0 ? 'a credit of' : 'a debit of' }}
+                  {{ (review.amount > 0 ? review.amount : -review.amount).toLocaleString('en-US') }}
+                  coins to {{ user()!.username }}?
+                </p>
+                <div class="adjust-preview">
+                  <span>
+                    Current:
+                    <strong>{{ wallet()!.balance.toLocaleString('en-US') }}</strong>
+                  </span>
+                  <span>
+                    Proposed:
+                    <strong [class.overdraw]="review.proposed < 0">
+                      {{ review.proposed.toLocaleString('en-US') }}
+                    </strong>
+                  </span>
+                </div>
+                <p class="muted">Reason: {{ review.reason }}</p>
+                @if (review.large) {
+                  <p class="large-banner">
+                    Large adjustment (≥ {{ adjustThreshold.toLocaleString('en-US') }} coins) —
+                    administrators only. Type ADJUST to confirm.
+                  </p>
+                  <label>
+                    Confirmation
+                    <input
+                      [(ngModel)]="adjustConfirmText"
+                      name="adjustConfirmText"
+                      placeholder="Type ADJUST"
+                      autocomplete="off"
+                    />
+                  </label>
+                }
+                @if (adjustError(); as err) {
+                  <p class="error-text" role="alert">{{ err }}</p>
+                }
+                <div class="confirm-buttons">
+                  <button
+                    class="primary"
+                    (click)="confirmAdjust()"
+                    [disabled]="adjustBusy() || (review.large && adjustConfirmText.trim() !== 'ADJUST')"
+                  >
+                    {{ adjustBusy() ? 'Applying…' : 'Apply adjustment' }}
+                  </button>
+                  <button class="ghost" (click)="backToEditAdjust()" [disabled]="adjustBusy()">
+                    Back
+                  </button>
+                </div>
+              </div>
+            } @else {
+              <label>
+                Direction
+                <select [(ngModel)]="adjustDirection" name="adjustDirection">
+                  <option value="credit">Credit (+)</option>
+                  <option value="debit">Debit (−)</option>
+                </select>
+              </label>
+              <label>
+                Amount (coins)
+                <input
+                  type="number"
+                  [(ngModel)]="adjustAmount"
+                  name="adjustAmount"
+                  min="1"
+                  step="1"
+                  placeholder="0"
+                />
+              </label>
+              <div class="adjust-preview">
+                <span>
+                  Current:
+                  <strong>{{ wallet()!.balance.toLocaleString('en-US') }}</strong>
+                </span>
+                <span>
+                  → Proposed:
+                  <strong [class.overdraw]="adjustOverdraws">
+                    {{ proposedBalance !== null ? proposedBalance.toLocaleString('en-US') : '—' }}
+                  </strong>
+                </span>
+              </div>
+              <label>
+                Reason (required — stored on the ledger and in the audit log)
+                <textarea
+                  [(ngModel)]="adjustReason"
+                  name="adjustReason"
+                  rows="2"
+                  maxlength="255"
+                  placeholder="Why is this adjustment being made?"
+                ></textarea>
+              </label>
+              @if (signedAdjustAmount !== 0 && adjustLarge) {
+                <p class="large-banner">
+                  ≥ {{ adjustThreshold.toLocaleString('en-US') }} coins — large adjustment;
+                  administrators only.
+                </p>
+              }
+              @if (adjustOverdraws) {
+                <p class="error-text" role="alert">
+                  This debit would overdraw the wallet — reduce the amount.
+                </p>
+              }
+              @if (adjustError(); as err) {
+                <p class="error-text" role="alert">{{ err }}</p>
+              }
+              <div class="confirm-buttons">
+                <button class="primary" (click)="reviewAdjust()" [disabled]="adjustOverdraws">
+                  Review adjustment
+                </button>
+                <button class="ghost" (click)="cancelAdjust()" [disabled]="adjustBusy()">
+                  Cancel
+                </button>
+              </div>
+            }
+          </div>
+        }
+
         <table>
           <thead>
             <tr>

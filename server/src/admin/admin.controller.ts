@@ -6,6 +6,7 @@ import {
   IsDefined,
   IsIn,
   IsInt,
+  IsNotEmpty,
   IsOptional,
   IsString,
   Matches,
@@ -136,10 +137,18 @@ class AdjustWalletBody {
   @Max(1_000_000)
   amount: number;
 
+  /** Mandatory: stored on the ledger row and in the audit entry. */
+  @IsString()
+  @IsNotEmpty()
+  @MaxLength(255)
+  reason: string;
+
+  /** Optional client token that makes retried submissions safe. */
   @IsOptional()
   @IsString()
-  @MaxLength(255)
-  memo?: string;
+  @MaxLength(64)
+  @Matches(/^[\w-]{8,64}$/)
+  idempotencyKey?: string;
 }
 
 class AdminListQuery extends PaginationQuery {
@@ -160,6 +169,16 @@ class EconomyQuery extends PaginationQuery {
   @IsOptional()
   @IsIn([...WALLET_TX_TYPES])
   type?: string;
+
+  /** Inclusive UTC day filter (YYYY-MM-DD). */
+  @IsOptional()
+  @Matches(ISO_DAY)
+  from?: string;
+
+  /** Inclusive UTC day filter (YYYY-MM-DD). */
+  @IsOptional()
+  @Matches(ISO_DAY)
+  to?: string;
 }
 
 class CosmeticsQuery extends PaginationQuery {
@@ -269,14 +288,21 @@ export class AdminController {
     return this.admin.finalizeMatch(actor.id, id, dto);
   }
 
-  @Roles('ADMIN')
+  @Roles('MODERATOR', 'ADMIN')
   @Post('wallets/:userId/adjust')
   adjust(
     @CurrentUser() actor: AuthUser,
     @Param('userId') userId: string,
     @Body() dto: AdjustWalletBody,
   ) {
-    return this.admin.adjustWallet(actor.id, userId, dto.amount, dto.memo);
+    return this.admin.adjustWallet(
+      actor.id,
+      actor.role,
+      userId,
+      dto.amount,
+      dto.reason,
+      dto.idempotencyKey,
+    );
   }
 
   // --- Phase 15: dashboard ---------------------------------------------------
@@ -309,6 +335,12 @@ export class AdminController {
   @Get('economy/transactions')
   economyTransactions(@Query() query: EconomyQuery) {
     return this.admin.economyTransactions(query);
+  }
+
+  @Roles('MODERATOR', 'ADMIN')
+  @Get('economy/trends')
+  economyTrends(@Query() query: EconomyQuery) {
+    return this.admin.economyTrends(query);
   }
 
   @Roles('MODERATOR', 'ADMIN')

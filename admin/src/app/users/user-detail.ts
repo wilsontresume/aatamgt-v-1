@@ -6,6 +6,8 @@ import { HttpClient, HttpParams } from '@angular/common/http';
 import { AuthService } from '../core/auth.service';
 import { serverMessage } from '../core/http-error';
 import {
+  AdjustResult,
+  ConfigEntry,
   ModerationNote,
   Paginated,
   PlayerDetail,
@@ -17,6 +19,17 @@ import {
 
 type LoadState = 'loading' | 'ready' | 'error';
 type ActionKind = 'suspend' | 'unsuspend' | 'ban' | 'unban' | 'revoke' | 'role';
+
+const THRESHOLD_KEY = 'admin.wallet_adjust_threshold';
+const DEFAULT_THRESHOLD = 100_000;
+
+interface AdjustReview {
+  amount: number;
+  reason: string;
+  proposed: number;
+  large: boolean;
+  key: string;
+}
 
 const STATUS_FOR_ACTION: Record<Exclude<ActionKind, 'revoke' | 'role'>, string> = {
   suspend: 'SUSPENDED',
@@ -50,6 +63,17 @@ export class UserDetailPage implements OnInit {
   noteBody = '';
   noteError = signal<string | null>(null);
 
+  // --- Phase D: wallet adjustment --------------------------------------------
+  readonly adjustOpen = signal(false);
+  readonly adjustBusy = signal(false);
+  readonly adjustError = signal<string | null>(null);
+  readonly adjustReview = signal<AdjustReview | null>(null);
+  adjustDirection: 'credit' | 'debit' = 'credit';
+  adjustAmount = '';
+  adjustReason = '';
+  adjustConfirmText = '';
+  adjustThreshold = DEFAULT_THRESHOLD;
+
   txPage = 1;
   matchPage = 1;
   notePage = 1;
@@ -64,6 +88,7 @@ export class UserDetailPage implements OnInit {
   ngOnInit(): void {
     this.userId = this.route.snapshot.paramMap.get('id') ?? '';
     this.load();
+    this.loadThreshold();
   }
 
   get isAdmin(): boolean {
@@ -297,6 +322,155 @@ export class UserDetailPage implements OnInit {
     } else {
       this.actionError.set('Could not reach the server. Nothing was changed — retry.');
     }
+  }
+
+  // --- Phase D: wallet adjustment --------------------------------------------
+
+  get canAdjust(): boolean {
+    const role = this.auth.user?.role;
+    return (role === 'ADMIN' || role === 'MODERATOR') && this.wallet() !== null;
+  }
+
+  get signedAdjustAmount(): number {
+    const n = Number(this.adjustAmount);
+    if (!Number.isInteger(n) || n <= 0) return 0;
+    return this.adjustDirection === 'credit' ? n : -n;
+  }
+
+  get proposedBalance(): number | null {
+    const w = this.wallet();
+    const amount = this.signedAdjustAmount;
+    if (!w || amount === 0) return null;
+    return w.balance + amount;
+  }
+
+  get adjustLarge(): boolean {
+    return Math.abs(this.signedAdjustAmount) >= this.adjustThreshold;
+  }
+
+  get adjustOverdraws(): boolean {
+    const proposed = this.proposedBalance;
+    return proposed !== null && proposed < 0;
+  }
+
+  openAdjust(): void {
+    this.adjustOpen.set(true);
+    this.adjustReview.set(null);
+    this.adjustError.set(null);
+    this.adjustDirection = 'credit';
+    this.adjustAmount = '';
+    this.adjustReason = '';
+    this.adjustConfirmText = '';
+  }
+
+  cancelAdjust(): void {
+    this.adjustOpen.set(false);
+    this.adjustReview.set(null);
+    this.adjustError.set(null);
+  }
+
+  reviewAdjust(): void {
+    const amount = this.signedAdjustAmount;
+    if (amount === 0) {
+      this.adjustError.set('Enter a whole number of coins greater than zero.');
+      return;
+    }
+    const reason = this.adjustReason.trim();
+    if (!reason) {
+      this.adjustError.set('A reason is required — it is stored on the ledger and in the audit log.');
+      return;
+    }
+    if (this.adjustOverdraws) {
+      this.adjustError.set('This debit would overdraw the wallet — reduce the amount.');
+      return;
+    }
+    const large = this.adjustLarge;
+    if (large && !this.isAdmin) {
+      this.adjustError.set(
+        `Adjustments of ${this.adjustThreshold.toLocaleString('en-US')} coins or more are restricted to administrators.`,
+      );
+      return;
+    }
+    this.adjustError.set(null);
+    this.adjustConfirmText = '';
+    this.adjustReview.set({
+      amount,
+      reason,
+      proposed: this.proposedBalance ?? 0,
+      large,
+      key: this.newIdempotencyKey(),
+    });
+  }
+
+  backToEditAdjust(): void {
+    this.adjustReview.set(null);
+    this.adjustConfirmText = '';
+    this.adjustError.set(null);
+  }
+
+  confirmAdjust(): void {
+    const review = this.adjustReview();
+    if (!review || this.adjustBusy()) return;
+    if (review.large && this.adjustConfirmText.trim() !== 'ADJUST') {
+      this.adjustError.set('Type ADJUST to confirm this large adjustment.');
+      return;
+    }
+
+    this.adjustBusy.set(true);
+    this.adjustError.set(null);
+    this.http
+      .post<AdjustResult>(`/api/v1/admin/wallets/${this.userId}/adjust`, {
+        amount: review.amount,
+        reason: review.reason,
+        idempotencyKey: review.key,
+      })
+      .subscribe({
+        next: (res) => {
+          this.adjustBusy.set(false);
+          this.adjustOpen.set(false);
+          this.adjustReview.set(null);
+          this.actionSuccess.set(
+            res.replayed
+              ? 'Duplicate request — this adjustment was already applied and was not counted twice.'
+              : `Balance updated to ${res.balance.toLocaleString('en-US')} coins.`,
+          );
+          this.load();
+        },
+        error: (err: { status?: number; message?: string }) => {
+          this.adjustBusy.set(false);
+          if (err?.status === 400) {
+            this.adjustError.set(serverMessage(err) || 'The adjustment was rejected. Check the values and retry.');
+          } else if (err?.status === 401) {
+            this.adjustError.set('Your session has expired. Sign in again.');
+          } else if (err?.status === 403) {
+            this.adjustError.set(serverMessage(err) || 'You do not have permission to make this adjustment.');
+          } else if (err?.status === 404) {
+            this.adjustError.set('This player no longer exists.');
+          } else if (err?.status === 409) {
+            this.adjustError.set(serverMessage(err) || 'The wallet is busy — retry the same adjustment.');
+          } else if (err?.status === 422) {
+            this.adjustError.set(serverMessage(err) || 'Insufficient balance.');
+          } else {
+            this.adjustError.set('Could not reach the server. Nothing was changed — retry.');
+          }
+        },
+      });
+  }
+
+  private newIdempotencyKey(): string {
+    const cryptoRef = globalThis.crypto as { randomUUID?: () => string } | undefined;
+    if (cryptoRef?.randomUUID) return `adj-${cryptoRef.randomUUID()}`;
+    return `adj-${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 12)}`;
+  }
+
+  private loadThreshold(): void {
+    this.http.get<{ items: ConfigEntry[] }>('/api/v1/admin/config').subscribe({
+      next: (res) => {
+        const entry = res.items.find((row) => row.key === THRESHOLD_KEY);
+        if (entry && typeof entry.value === 'number') this.adjustThreshold = entry.value;
+      },
+      error: () => undefined,
+    });
   }
 
   // --- Moderation notes -------------------------------------------------------

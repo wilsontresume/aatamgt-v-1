@@ -1,0 +1,216 @@
+<section class="page-head">
+  <div>
+    <h1>Economy</h1>
+    <p class="sub">
+      Coin circulation, flows and the full wallet ledger — real backend data only.
+      Virtual coins have no cash-out value.
+    </p>
+  </div>
+  <button class="ghost" (click)="load()" [disabled]="state() === 'loading'">Refresh</button>
+</section>
+
+<form class="filters" (ngSubmit)="applyFilters()">
+  <label>
+    From
+    <input type="date" name="from" [(ngModel)]="from" />
+  </label>
+  <label>
+    To
+    <input type="date" name="to" [(ngModel)]="to" />
+  </label>
+  <label>
+    Type
+    <select name="type" [(ngModel)]="typeFilter">
+      <option value="">All types</option>
+      @for (type of txTypes; track type) {
+        <option [value]="type">{{ type }}</option>
+      }
+    </select>
+  </label>
+  <label>
+    Player ID
+    <input
+      name="playerFilter"
+      [(ngModel)]="playerFilter"
+      placeholder="exact user id"
+      style="min-width: 200px"
+    />
+  </label>
+  <div class="filter-actions">
+    <button type="submit" class="primary">Apply</button>
+    <button type="button" class="ghost" (click)="resetFilters()">Reset</button>
+  </div>
+  <span class="range-note">
+    {{ rangeDays }} day{{ rangeDays === 1 ? '' : 's' }}
+    @if (!filtersActive) {
+      <em>(default)</em>
+    }
+  </span>
+</form>
+
+@if (state() === 'loading') {
+  <div class="panel state" role="status">
+    <div class="spinner"></div>
+    <p>Loading economy…</p>
+  </div>
+} @else if (state() === 'error') {
+  <div class="panel state error" role="alert">
+    <h2>Could not load the economy</h2>
+    <p>{{ errorMessage() }}</p>
+    <button class="primary" (click)="load()">Retry</button>
+  </div>
+} @else {
+  @if (summary(); as s) {
+    <div class="kpis">
+      <div class="kpi">
+        <span class="k">Coins in circulation</span>
+        <span class="v">{{ fmt(s.circulation.coins) }}</span>
+        <span class="s">{{ fmt(s.circulation.wallets) }} coin wallets</span>
+      </div>
+      <div class="kpi">
+        <span class="k">Locked balance</span>
+        <span class="v">{{ fmt(s.circulation.locked) }}</span>
+        <span class="s">held in escrow stakes</span>
+      </div>
+      <div class="kpi">
+        <span class="k">Coins issued (all time)</span>
+        <span class="v">{{ fmt(s.coinsIssued) }}</span>
+        <span class="s">credits across every source</span>
+      </div>
+      <div class="kpi">
+        <span class="k">Coins spent (all time)</span>
+        <span class="v">{{ fmt(s.coinsSpent) }}</span>
+        <span class="s">debits across every source</span>
+      </div>
+      <div class="kpi">
+        <span class="k">Ledger transactions</span>
+        <span class="v">{{ fmt(s.transactions) }}</span>
+        <span class="s">committed rows, all time</span>
+      </div>
+      <div class="kpi">
+        <span class="k">Rewarded ads</span>
+        <span class="v">{{ fmt(s.rewardedAds.redeemed) }} / {{ fmt(s.rewardedAds.sessions) }}</span>
+        <span class="s">{{ fmt(s.rewardedAds.coinsGranted) }} coins granted</span>
+      </div>
+      <div class="kpi">
+        <span class="k">Purchases</span>
+        <span class="v">{{ fmt(s.purchases.count) }}</span>
+        <span class="s">
+          @for (row of purchaseStates(); track row.state) {
+            <span class="state-chip">{{ row.state }} {{ row.count }}</span>
+          }
+        </span>
+      </div>
+    </div>
+  }
+
+  <div class="grid">
+    <div class="panel">
+      <h2>Coins issued per day</h2>
+      <app-bar-chart [rows]="issuedRows()" unit="coins" />
+    </div>
+
+    <div class="panel">
+      <h2>Coins spent per day</h2>
+      <app-bar-chart [rows]="spentRows()" unit="coins" />
+    </div>
+
+    <div class="panel">
+      <h2>Net flow per day</h2>
+      <app-bar-chart [rows]="netRows()" unit="coins" />
+      @if (netNegativeInRange) {
+        <p class="muted hint-text">
+          Bars show positive net days; days that net negative are listed below.
+        </p>
+      }
+    </div>
+
+    <div class="panel">
+      <h2>Large-adjustment threshold</h2>
+      @if (threshold(); as t) {
+        <p class="threshold-line">
+          <span class="k">Current threshold</span>
+          <strong>{{ fmt(thresholdValue) }} coins</strong>
+          @if (t.overridden) {
+            <em class="overridden">overridden</em>
+          } @else {
+            <em>default</em>
+          }
+        </p>
+        <p class="muted">
+          Adjustments of this size or more are restricted to administrators. Moderator corrections
+          stay below it.
+        </p>
+        @if (isAdmin) {
+          <label class="threshold-edit">
+            New threshold (min {{ t.min }}, max {{ t.max }})
+            <input type="number" name="thresholdDraft" [(ngModel)]="thresholdDraft" min="1" max="1000000" step="1" />
+          </label>
+          @if (thresholdError(); as err) {
+            <p class="error-text" role="alert">{{ err }}</p>
+          }
+          @if (thresholdSuccess(); as ok) {
+            <p class="success-text" role="status">{{ ok }}</p>
+          }
+          <button class="primary" (click)="saveThreshold()" [disabled]="thresholdBusy()">
+            {{ thresholdBusy() ? 'Saving…' : 'Save threshold' }}
+          </button>
+        }
+      } @else {
+        <p class="muted">Threshold configuration could not be loaded.</p>
+      }
+    </div>
+
+    <div class="panel wide">
+      <h2>Wallet transactions</h2>
+      <p class="muted">
+        Date range, type and player filters apply to this table. Only committed ledger rows appear
+        here — rejected or duplicate adjustment attempts never create rows and are reported in the
+        adjustment dialog instead.
+      </p>
+      @if (tx(); as page) {
+        <table>
+          <thead>
+            <tr>
+              <th>When (UTC)</th>
+              <th>Player</th>
+              <th>Type</th>
+              <th class="num">Amount</th>
+              <th class="num">Balance after</th>
+              <th>Reason / memo</th>
+            </tr>
+          </thead>
+          <tbody>
+            @for (row of page.items; track row.id) {
+              <tr>
+                <td class="mono">{{ row.createdAt | date: 'yyyy-MM-dd HH:mm' }}</td>
+                <td>
+                  <a [routerLink]="['/users', row.userId]" class="player-link">{{ row.username }}</a>
+                </td>
+                <td class="mono">{{ row.type }}</td>
+                <td class="num" [class.positive]="row.amount > 0" [class.negative]="row.amount < 0">
+                  {{ signed(row.amount) }}
+                </td>
+                <td class="num">{{ fmt(row.balanceAfter) }}</td>
+                <td>{{ row.memo ?? '—' }}</td>
+              </tr>
+            } @empty {
+              <tr>
+                <td colspan="6" class="muted">
+                  No transactions match this filter.
+                </td>
+              </tr>
+            }
+          </tbody>
+        </table>
+        @if (page.total > page.limit) {
+          <div class="pager">
+            <button class="ghost" (click)="prevTx()" [disabled]="txPage <= 1">Previous</button>
+            <span class="muted">Page {{ txPage }} of {{ txPages() }}</span>
+            <button class="ghost" (click)="nextTx()" [disabled]="txPage >= txPages()">Next</button>
+          </div>
+        }
+      }
+    </div>
+  </div>
+}

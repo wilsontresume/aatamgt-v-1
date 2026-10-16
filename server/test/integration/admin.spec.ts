@@ -60,7 +60,7 @@ describe('Admin (integration)', () => {
     const adjust = await request(app.getHttpServer())
       .post(`${apiPrefix(app)}/admin/wallets/${player.id}/adjust`)
       .set(auth(adminToken))
-      .send({ amount: 250, memo: 'phase 2 test grant' });
+      .send({ amount: 250, reason: 'phase 2 test grant' });
     expect(adjust.status).toBe(201);
     expect(adjust.body.balance).toBe(1250); // 1000 registration bonus + 250 adjustment
 

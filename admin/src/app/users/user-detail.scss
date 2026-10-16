@@ -237,7 +237,8 @@ button.ghost {
   }
 
   textarea,
-  select {
+  select,
+  input {
     border: 1px solid t.$line;
     border-radius: 8px;
     padding: 8px 10px;
@@ -309,6 +310,77 @@ button.ghost {
   flex-wrap: wrap;
   gap: 8px;
   margin-bottom: 12px;
+}
+
+.wallet-actions {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  margin-bottom: 12px;
+}
+
+.adjust-form {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  margin-bottom: 14px;
+  border: 1px solid t.$line;
+  background: #fafaf9;
+  border-radius: 10px;
+  padding: 12px;
+
+  label {
+    display: flex;
+    flex-direction: column;
+    gap: 4px;
+    font-size: 0.75rem;
+    font-weight: 700;
+    color: #44403c;
+    max-width: 360px;
+  }
+
+  input,
+  select,
+  textarea {
+    border: 1px solid t.$line;
+    border-radius: 8px;
+    padding: 8px 10px;
+    font-size: 0.86rem;
+    font-family: inherit;
+    background: #fff;
+    max-width: 320px;
+  }
+
+  textarea {
+    resize: vertical;
+  }
+}
+
+.adjust-preview {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 16px;
+  font-size: 0.86rem;
+  color: #44403c;
+
+  strong {
+    color: t.$teal-900;
+  }
+
+  strong.overdraw {
+    color: t.$danger;
+  }
+}
+
+.large-banner {
+  margin: 0;
+  border-left: 4px solid t.$wood-500;
+  background: t.$cream;
+  color: #78350f;
+  font-size: 0.8rem;
+  font-weight: 700;
+  padding: 8px 10px;
+  border-radius: 6px;
 }
 
 .wallet-chip {

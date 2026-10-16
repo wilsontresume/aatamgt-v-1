@@ -105,7 +105,7 @@ describe('Admin dashboard (Phase 15)', () => {
       request(api())
         .post(`${apiPrefix(app)}/admin/wallets/${opponent.id}/adjust`)
         .set(auth(player.accessToken))
-        .send({ amount: 1 }),
+        .send({ amount: 1, reason: 'should never land' }),
     ];
     for (const res of await Promise.all(actions)) {
       expect(res.status).toBe(403);
@@ -162,7 +162,7 @@ describe('Admin dashboard (Phase 15)', () => {
     const adjust = await request(api())
       .post(`${apiPrefix(app)}/admin/wallets/${player.id}/adjust`)
       .set(auth(adminToken))
-      .send({ amount: 250, memo: 'phase 15 dashboard grant' });
+      .send({ amount: 250, reason: 'phase 15 dashboard grant' });
     expect(adjust.status).toBe(201);
     expect(adjust.body.balance).toBe(beforeBalance + 250);
 
