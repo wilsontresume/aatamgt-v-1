@@ -1,5 +1,10 @@
-import { BadRequestException, Injectable, NotFoundException } from '@nestjs/common';
-import { CosmeticCategory, MatchResult, Prisma, UserStatus, WalletTxType } from '@prisma/client';
+import {
+  BadRequestException,
+  ConflictException,
+  Injectable,
+  NotFoundException,
+} from '@nestjs/common';
+import { CosmeticCategory, MatchResult, Prisma, Role, UserStatus, WalletTxType } from '@prisma/client';
 import { PrismaService } from '../prisma/prisma.service';
 import { WalletService } from '../wallet/wallet.service';
 import { SystemConfigService } from '../config/system-config.service';
@@ -35,16 +40,29 @@ export class AdminService {
     return { users, activeMatches, games, transactions };
   }
 
-  async users(query: PaginationQuery & { q?: string }) {
+  async users(
+    query: PaginationQuery & {
+      q?: string;
+      accountType?: 'guest' | 'registered';
+      status?: 'ACTIVE' | 'SUSPENDED' | 'BANNED';
+    },
+  ) {
     const where: Prisma.UserWhereInput = {
       deletedAt: null,
       ...(query.q
         ? {
-            OR: [{ username: { contains: query.q } }, { email: { contains: query.q } }],
+            OR: [
+              { username: { contains: query.q } },
+              { email: { contains: query.q } },
+              { id: query.q },
+            ],
           }
         : {}),
+      ...(query.accountType === 'guest' ? { isGuest: true } : {}),
+      ...(query.accountType === 'registered' ? { isGuest: false } : {}),
+      ...(query.status ? { status: query.status as UserStatus } : {}),
     };
-    const [items, total] = await Promise.all([
+    const [rows, total] = await Promise.all([
       this.prisma.user.findMany({
         where,
         orderBy: { createdAt: 'desc' },
@@ -56,13 +74,39 @@ export class AdminService {
           email: true,
           role: true,
           status: true,
+          isGuest: true,
           createdAt: true,
           lastLoginAt: true,
+          profile: {
+            select: {
+              wins: true,
+              losses: true,
+              draws: true,
+              gamesPlayed: true,
+              rating: true,
+              level: true,
+            },
+          },
         },
       }),
       this.prisma.user.count({ where }),
     ]);
-    return { items, page: query.page, limit: query.limit, total };
+    return {
+      items: rows.map((row) => ({
+        id: row.id,
+        username: row.username,
+        email: row.email,
+        role: row.role,
+        status: row.status,
+        isGuest: row.isGuest,
+        createdAt: row.createdAt,
+        lastLoginAt: row.lastLoginAt,
+        stats: row.profile,
+      })),
+      page: query.page,
+      limit: query.limit,
+      total,
+    };
   }
 
   async setUserStatus(actorId: string, userId: string, status: UserStatus, reason?: string) {
@@ -77,8 +121,135 @@ export class AdminService {
       data: { status },
       select: { id: true, username: true, status: true },
     });
-    await this.audit(actorId, 'user.status', 'user', userId, { status, reason });
+    await this.audit(actorId, 'user.status', 'user', userId, {
+      status,
+      reason,
+      previous: user.status,
+    });
     return updated;
+  }
+
+  // --- Phase C: user & account management -----------------------------------
+
+  async listModerationNotes(
+    userId: string,
+    query: PaginationQuery,
+  ): Promise<Paginated<unknown>> {
+    const user = await this.prisma.user.findUnique({
+      where: { id: userId },
+      select: { id: true },
+    });
+    if (!user) throw new NotFoundException('User not found');
+    const where: Prisma.ModerationNoteWhereInput = { targetUserId: userId };
+    const [rows, total] = await Promise.all([
+      this.prisma.moderationNote.findMany({
+        where,
+        orderBy: { createdAt: 'desc' },
+        skip: query.skip,
+        take: query.limit,
+        include: { author: { select: { id: true, username: true } } },
+      }),
+      this.prisma.moderationNote.count({ where }),
+    ]);
+    return {
+      items: rows.map((row) => ({
+        id: row.id,
+        body: row.body,
+        createdAt: row.createdAt.toISOString(),
+        author: row.author,
+      })),
+      page: query.page,
+      limit: query.limit,
+      total,
+    };
+  }
+
+  async createModerationNote(actorId: string, userId: string, rawBody: string) {
+    const body = rawBody.trim();
+    if (!body) throw new BadRequestException('Note body must not be empty');
+    const user = await this.prisma.user.findUnique({
+      where: { id: userId },
+      select: { id: true, deletedAt: true },
+    });
+    if (!user || user.deletedAt) throw new NotFoundException('User not found');
+    const created = await this.prisma.moderationNote.create({
+      data: { targetUserId: userId, authorUserId: actorId, body },
+      include: { author: { select: { id: true, username: true } } },
+    });
+    await this.audit(actorId, 'moderation.note.create', 'user', userId, {
+      noteId: created.id,
+      preview: body.slice(0, 120),
+    });
+    return {
+      id: created.id,
+      body: created.body,
+      createdAt: created.createdAt.toISOString(),
+      author: created.author,
+    };
+  }
+
+  /**
+   * Revokes every usable refresh token of the target user. Access tokens stay
+   * short-lived and the JWT strategy re-reads account state per request, so
+   * this primarily stops the account from continuing a session via refresh.
+   */
+  async revokeUserSessions(actorId: string, userId: string) {
+    const user = await this.prisma.user.findUnique({
+      where: { id: userId },
+      select: { id: true, deletedAt: true },
+    });
+    if (!user || user.deletedAt) throw new NotFoundException('User not found');
+    const result = await this.prisma.refreshToken.updateMany({
+      where: { userId, revokedAt: null },
+      data: { revokedAt: new Date() },
+    });
+    await this.audit(actorId, 'user.sessions.revoke', 'user', userId, {
+      sessionsRevoked: result.count,
+    });
+    return { userId, sessionsRevoked: result.count };
+  }
+
+  /**
+   * ADMIN-only, audited role change. Guard: an active ADMIN cannot be
+   * demoted while they are the last active administrator — this prevents
+   * (self-)demotion from removing the platform's last usable admin access.
+   * Role changes revoke the target's refresh tokens so the new role is
+   * picked up on the next sign-in rather than a stale session.
+   */
+  async setUserRole(actorId: string, userId: string, role: Role) {
+    const user = await this.prisma.user.findUnique({
+      where: { id: userId },
+      select: { id: true, username: true, role: true, status: true, deletedAt: true },
+    });
+    if (!user || user.deletedAt) throw new NotFoundException('User not found');
+    if (user.role === role) {
+      return { id: user.id, username: user.username, role: user.role, sessionsRevoked: 0 };
+    }
+    if (user.role === 'ADMIN' && role !== 'ADMIN' && user.status === 'ACTIVE') {
+      const activeAdmins = await this.prisma.user.count({
+        where: { role: 'ADMIN', status: 'ACTIVE', deletedAt: null },
+      });
+      if (activeAdmins <= 1) {
+        throw new ConflictException(
+          'This is the last active administrator account; promote another administrator first.',
+        );
+      }
+    }
+    const updated = await this.prisma.user.update({
+      where: { id: userId },
+      data: { role },
+      select: { id: true, username: true, role: true },
+    });
+    const revoked = await this.prisma.refreshToken.updateMany({
+      where: { userId, revokedAt: null },
+      data: { revokedAt: new Date() },
+    });
+    await this.audit(actorId, 'user.role', 'user', userId, {
+      previous: user.role,
+      next: role,
+      sessionsRevoked: revoked.count,
+    });
+    return { ...updated, sessionsRevoked: revoked.count };
   }
 
   async matches(query: PaginationQuery & { status?: string }) {
@@ -524,15 +695,31 @@ export class AdminService {
     return { items: await this.systemConfig.entries(), changes: changes.length };
   }
 
-  async auditLog(query: PaginationQuery): Promise<Paginated<unknown>> {
-    const where = {};
+  async auditLog(
+    query: PaginationQuery & { action?: string; actor?: string; from?: string; to?: string },
+  ): Promise<Paginated<unknown>> {
+    const dayStart = (day: string): Date => new Date(`${day}T00:00:00.000Z`);
+    const where: Prisma.AdminAuditLogWhereInput = {
+      ...(query.action ? { action: query.action } : {}),
+      ...(query.actor ? { actor: { username: { contains: query.actor } } } : {}),
+      ...(query.from || query.to
+        ? {
+            createdAt: {
+              ...(query.from ? { gte: dayStart(query.from) } : {}),
+              ...(query.to
+                ? { lt: new Date(dayStart(query.to).getTime() + 86_400_000) }
+                : {}),
+            },
+          }
+        : {}),
+    };
     const [items, total] = await Promise.all([
       this.prisma.adminAuditLog.findMany({
         where,
         orderBy: { createdAt: 'desc' },
         skip: query.skip,
         take: query.limit,
-        include: { actor: { select: { username: true } } },
+        include: { actor: { select: { id: true, username: true } } },
       }),
       this.prisma.adminAuditLog.count({ where }),
     ]);
@@ -541,6 +728,7 @@ export class AdminService {
         id: row.id,
         action: row.action,
         actor: row.actor.username,
+        actorId: row.actor.id,
         targetType: row.targetType,
         targetId: row.targetId,
         data: row.data,

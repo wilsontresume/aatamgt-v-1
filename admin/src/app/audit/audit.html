@@ -1,0 +1,101 @@
+<section class="page-head">
+  <div>
+    <h1>Audit log</h1>
+    <p class="sub">
+      Every administrative action, filtered server-side. Before/after values are shown for
+      known actions; unknown payloads stay verbatim JSON.
+    </p>
+  </div>
+  <button class="ghost" (click)="load()" [disabled]="state() === 'loading'">Refresh</button>
+</section>
+
+<form class="filters" (ngSubmit)="applyFilters()">
+  <label>
+    Action
+    <select name="action" [(ngModel)]="action">
+      <option value="">All actions</option>
+      @for (known of knownActions; track known) {
+        <option [value]="known">{{ known }}</option>
+      }
+    </select>
+  </label>
+  <label>
+    Actor (username contains)
+    <input type="search" name="actor" [(ngModel)]="actor" placeholder="e.g. admin" />
+  </label>
+  <label>
+    From
+    <input type="date" name="from" [(ngModel)]="from" />
+  </label>
+  <label>
+    To
+    <input type="date" name="to" [(ngModel)]="to" />
+  </label>
+  <div class="filter-actions">
+    <button type="submit" class="primary">Apply</button>
+    <button type="button" class="ghost" (click)="resetFilters()">Reset</button>
+  </div>
+</form>
+
+@if (state() === 'loading') {
+  <div class="panel state" role="status">
+    <div class="spinner"></div>
+    <p>Loading audit log…</p>
+  </div>
+} @else if (state() === 'error') {
+  <div class="panel state error" role="alert">
+    <h2>Could not load the audit log</h2>
+    <p>{{ errorMessage() }}</p>
+    <button class="primary" (click)="load()">Retry</button>
+  </div>
+} @else {
+  <div class="panel">
+    <div class="table-head">
+      <h2>Actions</h2>
+      <span class="muted">
+        {{ data()!.total }} total
+        @if (hasFilters) {
+          <em>(filtered)</em>
+        }
+      </span>
+    </div>
+    <table>
+      <thead>
+        <tr>
+          <th>When (UTC)</th>
+          <th>Actor</th>
+          <th>Action</th>
+          <th>Target</th>
+          <th>Details</th>
+        </tr>
+      </thead>
+      <tbody>
+        @for (row of data()!.items; track row.id) {
+          <tr>
+            <td class="mono">{{ row.createdAt | date: 'yyyy-MM-dd HH:mm' }}</td>
+            <td>{{ row.actor }}</td>
+            <td class="mono">{{ row.action }}</td>
+            <td class="mono">{{ targetLabel(row) }}</td>
+            <td class="details">{{ describe(row) }}</td>
+          </tr>
+        } @empty {
+          <tr>
+            <td colspan="5" class="muted">
+              @if (hasFilters) {
+                No audit entries match the current filters.
+              } @else {
+                No admin actions recorded yet.
+              }
+            </td>
+          </tr>
+        }
+      </tbody>
+    </table>
+
+    <div class="pager">
+      <button class="ghost" (click)="prevPage()" [disabled]="page <= 1">Previous</button>
+      <span class="muted">Page {{ page }} of {{ totalPages }}</span>
+      <button class="ghost" (click)="nextPage()" [disabled]="page >= totalPages">Next</button>
+    </div>
+  </div>
+}

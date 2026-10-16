@@ -62,6 +62,8 @@ model User {
   ratingEvents    RatingEvent[]
   purchases       Purchase[]
   matchmakingTickets MatchmakingTicket[]
+  moderationNotesWritten  ModerationNote[] @relation("ModerationNoteAuthor")
+  moderationNotesReceived ModerationNote[] @relation("ModerationNoteTarget")
 
   @@index([status])
   @@index([createdAt])
@@ -480,6 +482,22 @@ model AdminAuditLog {
 
   @@index([actorUserId, createdAt])
   @@index([action, createdAt])
+}
+
+/// Staff moderation notes on a user account (Phase C): author, timestamp,
+/// target. Append-only for now; never carries credentials.
+model ModerationNote {
+  id           String   @id @default(cuid())
+  targetUserId String
+  authorUserId String
+  body         String   @db.Text
+  createdAt    DateTime @default(now())
+
+  target User @relation("ModerationNoteTarget", fields: [targetUserId], references: [id], onDelete: Cascade)
+  author User @relation("ModerationNoteAuthor", fields: [authorUserId], references: [id], onDelete: Cascade)
+
+  @@index([targetUserId, createdAt])
+  @@index([authorUserId, createdAt])
 }
 
 /// Runtime platform configuration (Phase 15). Admin-editable overrides;

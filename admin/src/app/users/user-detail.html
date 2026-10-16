@@ -1,0 +1,316 @@
+<section class="page-head">
+  <div>
+    <a routerLink="/users" class="back">← All users</a>
+    <h1>{{ user()?.username ?? 'Player' }}</h1>
+    <p class="sub badges">
+      @if (user(); as u) {
+        <span class="badge" [class.role-admin]="u.role === 'ADMIN'" [class.role-mod]="u.role === 'MODERATOR'">{{ u.role }}</span>
+        <span class="badge" [class.st-active]="u.status === 'ACTIVE'" [class.st-suspended]="u.status === 'SUSPENDED'" [class.st-banned]="u.status === 'BANNED'">{{ u.status }}</span>
+        <span class="badge">{{ u.isGuest ? 'Guest' : 'Account' }}</span>
+      }
+    </p>
+  </div>
+  <button class="ghost" (click)="load()" [disabled]="state() === 'loading'">Refresh</button>
+</section>
+
+@if (state() === 'loading') {
+  <div class="panel state" role="status">
+    <div class="spinner"></div>
+    <p>Loading player…</p>
+  </div>
+} @else if (state() === 'error') {
+  <div class="panel state error" role="alert">
+    <h2>Could not load this player</h2>
+    <p>{{ errorMessage() }}</p>
+    <button class="primary" (click)="load()">Retry</button>
+  </div>
+} @else {
+  @if (actionSuccess(); as msg) {
+    <div class="banner ok" role="status">
+      <span>{{ msg }}</span>
+      <button class="ghost" (click)="actionSuccess.set(null)">Dismiss</button>
+    </div>
+  }
+
+  <div class="grid">
+    <div class="panel wide">
+      <h2>Account &amp; profile</h2>
+      <div class="facts">
+        <div class="fact">
+          <span class="k">Player ID</span>
+          <span class="mono">{{ user()!.id }}</span>
+        </div>
+        <div class="fact">
+          <span class="k">Email</span>
+          <span>{{ user()!.email ?? '—' }}</span>
+        </div>
+        <div class="fact">
+          <span class="k">Created (UTC)</span>
+          <span class="mono">{{ user()!.createdAt | date: 'yyyy-MM-dd HH:mm' }}</span>
+        </div>
+        <div class="fact">
+          <span class="k">Last login (UTC)</span>
+          <span class="mono">{{ user()!.lastLoginAt ? (user()!.lastLoginAt | date: 'yyyy-MM-dd HH:mm') : '—' }}</span>
+        </div>
+        <div class="fact">
+          <span class="k">Royal pass</span>
+          <span class="mono">{{ user()!.royalPassExpiresAt ? (user()!.royalPassExpiresAt | date: 'yyyy-MM-dd HH:mm') : 'Not active' }}</span>
+        </div>
+        @if (user()!.profile; as p) {
+          <div class="fact">
+            <span class="k">Display name</span>
+            <span>{{ p.displayName ?? '—' }}</span>
+          </div>
+          <div class="fact">
+            <span class="k">Level / XP</span>
+            <span>{{ p.level }} · {{ p.xp }} XP</span>
+          </div>
+          <div class="fact">
+            <span class="k">Rating</span>
+            <span>{{ p.rating }}</span>
+          </div>
+          <div class="fact">
+            <span class="k">Record</span>
+            <span>{{ p.wins }}W · {{ p.losses }}L · {{ p.draws }}D · {{ p.gamesPlayed }} games</span>
+          </div>
+        } @else {
+          <div class="fact">
+            <span class="k">Profile</span>
+            <span class="muted">No profile data recorded yet.</span>
+          </div>
+        }
+      </div>
+    </div>
+
+    @if (isAdmin) {
+      <div class="panel">
+        <h2>Moderation actions</h2>
+
+        <div class="actions">
+          @if (user()!.status === 'ACTIVE') {
+            <button class="ghost" (click)="beginAction('suspend')" [disabled]="statusChangeBlocked || pendingAction() !== null">Suspend</button>
+            <button class="ghost danger" (click)="beginAction('ban')" [disabled]="statusChangeBlocked || pendingAction() !== null">Ban</button>
+          } @else if (user()!.status === 'SUSPENDED') {
+            <button class="ghost" (click)="beginAction('unsuspend')" [disabled]="statusChangeBlocked || pendingAction() !== null">Reactivate</button>
+            <button class="ghost danger" (click)="beginAction('ban')" [disabled]="statusChangeBlocked || pendingAction() !== null">Ban</button>
+          } @else {
+            <button class="ghost" (click)="beginAction('unban')" [disabled]="statusChangeBlocked || pendingAction() !== null">Unban</button>
+          }
+          <button class="ghost" (click)="beginAction('revoke')" [disabled]="pendingAction() !== null">Revoke sessions</button>
+          <button class="ghost" (click)="beginAction('role')" [disabled]="pendingAction() !== null">Change role</button>
+        </div>
+
+        @if (statusChangeBlocked) {
+          <p class="muted hint">You cannot change your own account status.</p>
+        }
+
+        @if (pendingAction(); as kind) {
+          <div class="confirm" role="group">
+            <p class="confirm-title">
+              @switch (kind) {
+                @case ('suspend') { Suspend {{ user()!.username }}? They cannot sign in until reactivated. }
+                @case ('unsuspend') { Reactivate {{ user()!.username }}? }
+                @case ('ban') { Ban {{ user()!.username }}? They cannot sign in until unbanned. }
+                @case ('unban') { Unban {{ user()!.username }}? }
+                @case ('revoke') { Revoke every active session for {{ user()!.username }}? Refresh tokens are revoked; short-lived access tokens expire on their own. }
+                @case ('role') { Change the role of {{ user()!.username }}? Their sessions are revoked and the new role applies on next sign-in. }
+              }
+            </p>
+
+            @if (kind === 'role') {
+              <label class="role-label">
+                New role
+                <select [(ngModel)]="roleChoice" name="roleChoice">
+                  <option value="USER">USER</option>
+                  <option value="MODERATOR">MODERATOR</option>
+                  <option value="ADMIN">ADMIN</option>
+                </select>
+              </label>
+            }
+
+            @if (pendingNeedsReason) {
+              <label>
+                Reason (required, stored in the audit log)
+                <textarea
+                  [(ngModel)]="reason"
+                  name="reason"
+                  rows="2"
+                  maxlength="500"
+                  placeholder="Why is this action being taken?"
+                ></textarea>
+              </label>
+            }
+
+            @if (actionError(); as err) {
+              <p class="error-text" role="alert">{{ err }}</p>
+            }
+
+            <div class="confirm-buttons">
+              <button class="primary" (click)="confirmAction()" [disabled]="actionBusy()">
+                {{ actionBusy() ? 'Applying…' : 'Confirm' }}
+              </button>
+              <button class="ghost" (click)="cancelAction()" [disabled]="actionBusy()">Cancel</button>
+            </div>
+          </div>
+        }
+      </div>
+    }
+
+    <div class="panel wide">
+      <h2>Moderation notes</h2>
+      @if (actionSuccess() === 'Moderation note added.') {
+        <p class="muted">Newest note shown first.</p>
+      }
+      <div class="note-form">
+        <label>
+          Add a note (visible to moderators and administrators)
+          <textarea
+            [(ngModel)]="noteBody"
+            name="noteBody"
+            rows="3"
+            maxlength="1000"
+            placeholder="Context for other staff, e.g. why a suspension was applied."
+          ></textarea>
+        </label>
+        @if (noteError(); as err) {
+          <p class="error-text" role="alert">{{ err }}</p>
+        }
+        <button class="primary" (click)="addNote()">Add note</button>
+      </div>
+
+      <table>
+        <thead>
+          <tr><th>Author</th><th>When (UTC)</th><th>Note</th></tr>
+        </thead>
+        <tbody>
+          @for (note of notes()?.items ?? []; track note.id) {
+            <tr>
+              <td>{{ note.author.username }}</td>
+              <td class="mono">{{ note.createdAt | date: 'yyyy-MM-dd HH:mm' }}</td>
+              <td>{{ note.body }}</td>
+            </tr>
+          } @empty {
+            <tr><td colspan="3" class="muted">No moderation notes for this player.</td></tr>
+          }
+        </tbody>
+      </table>
+      @if ((notes()?.total ?? 0) > 10) {
+        <div class="pager">
+          <button class="ghost" (click)="prevNote()" [disabled]="notePage <= 1">Previous</button>
+          <span class="muted">Page {{ notePage }} of {{ notePages() }}</span>
+          <button class="ghost" (click)="nextNote()" [disabled]="notePage >= notePages()">Next</button>
+        </div>
+      }
+    </div>
+
+    <div class="panel wide">
+      <h2>Wallet &amp; transactions</h2>
+      @if (wallet(); as w) {
+        <div class="wallet-balances">
+          @for (currency of user()?.wallets ?? []; track currency.currency) {
+            <span class="wallet-chip">
+              {{ currency.balance.toLocaleString('en-US') }} {{ currency.currency }}
+              @if (currency.lockedBalance > 0) {
+                <em>({{ currency.lockedBalance.toLocaleString('en-US') }} locked)</em>
+              }
+            </span>
+          } @empty {
+            <span class="muted">No wallets.</span>
+          }
+        </div>
+        <table>
+          <thead>
+            <tr>
+              <th>When (UTC)</th>
+              <th>Type</th>
+              <th class="num">Amount</th>
+              <th class="num">Balance after</th>
+              <th>Memo</th>
+            </tr>
+          </thead>
+          <tbody>
+            @for (tx of w.items; track tx.id) {
+              <tr>
+                <td class="mono">{{ tx.createdAt | date: 'yyyy-MM-dd HH:mm' }}</td>
+                <td class="mono">{{ tx.type }}</td>
+                <td class="num" [class.positive]="tx.amount > 0" [class.negative]="tx.amount < 0">
+                  {{ tx.amount > 0 ? '+' : '' }}{{ tx.amount.toLocaleString('en-US') }}
+                </td>
+                <td class="num">{{ tx.balanceAfter.toLocaleString('en-US') }}</td>
+                <td>{{ tx.memo ?? '—' }}</td>
+              </tr>
+            } @empty {
+              <tr><td colspan="5" class="muted">No transactions yet.</td></tr>
+            }
+          </tbody>
+        </table>
+        @if (w.total > w.limit) {
+          <div class="pager">
+            <button class="ghost" (click)="prevTx()" [disabled]="txPage <= 1">Previous</button>
+            <span class="muted">Page {{ txPage }} of {{ txPages() }}</span>
+            <button class="ghost" (click)="nextTx()" [disabled]="txPage >= txPages()">Next</button>
+          </div>
+        }
+      } @else {
+        <p class="muted">Wallet data could not be loaded.</p>
+      }
+    </div>
+
+    <div class="panel wide">
+      <h2>Match history</h2>
+      @if (matches(); as m) {
+        <table>
+          <thead>
+            <tr>
+              <th>Game</th>
+              <th>Status</th>
+              <th>Players &amp; results</th>
+              <th>Started (UTC)</th>
+              <th>Completed (UTC)</th>
+            </tr>
+          </thead>
+          <tbody>
+            @for (match of m.items; track match.id) {
+              <tr>
+                <td>{{ match.game?.name ?? match.game?.key ?? '—' }}</td>
+                <td class="mono">{{ match.status }}</td>
+                <td>{{ formatMatchPlayers(match) }}</td>
+                <td class="mono">{{ match.createdAt | date: 'yyyy-MM-dd HH:mm' }}</td>
+                <td class="mono">{{ match.completedAt ? (match.completedAt | date: 'yyyy-MM-dd HH:mm') : '—' }}</td>
+              </tr>
+            } @empty {
+              <tr><td colspan="5" class="muted">This player has not played any matches.</td></tr>
+            }
+          </tbody>
+        </table>
+        @if (m.total > m.limit) {
+          <div class="pager">
+            <button class="ghost" (click)="prevMatch()" [disabled]="matchPage <= 1">Previous</button>
+            <span class="muted">Page {{ matchPage }} of {{ matchPages() }}</span>
+            <button class="ghost" (click)="nextMatch()" [disabled]="matchPage >= matchPages()">Next</button>
+          </div>
+        }
+      } @else {
+        <p class="muted">Match data could not be loaded.</p>
+      }
+    </div>
+
+    <div class="panel">
+      <h2>Account linking</h2>
+      <p class="unsupported">Not supported in this release.</p>
+      <p class="muted">
+        This build has no linked platform accounts (Google, Apple, Steam) and no link/unlink
+        endpoints — nothing is shown here on purpose.
+      </p>
+    </div>
+
+    <div class="panel">
+      <h2>Player reports</h2>
+      <p class="unsupported">Not supported in this release.</p>
+      <p class="muted">
+        No report data model exists yet, so there are no reports to display or act on for this
+        player.
+      </p>
+    </div>
+  </div>
+}

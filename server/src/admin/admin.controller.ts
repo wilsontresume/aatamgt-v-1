@@ -49,6 +49,58 @@ class UserStatusBody {
   reason?: string;
 }
 
+const ISO_DAY = /^\d{4}-\d{2}-\d{2}$/;
+
+class UserListQuery extends PaginationQuery {
+  /** Username/email substring, or an exact player (user) id. */
+  @IsOptional()
+  @IsString()
+  @MaxLength(190)
+  q?: string;
+
+  @IsOptional()
+  @IsIn(['guest', 'registered'])
+  accountType?: 'guest' | 'registered';
+
+  @IsOptional()
+  @IsIn(['ACTIVE', 'SUSPENDED', 'BANNED'])
+  status?: 'ACTIVE' | 'SUSPENDED' | 'BANNED';
+}
+
+class AuditQuery extends PaginationQuery {
+  /** Exact action name, e.g. `user.status`. */
+  @IsOptional()
+  @IsString()
+  @MaxLength(128)
+  action?: string;
+
+  /** Actor username substring. */
+  @IsOptional()
+  @IsString()
+  @MaxLength(190)
+  actor?: string;
+
+  @IsOptional()
+  @Matches(ISO_DAY, { message: '`from` must be a valid YYYY-MM-DD date' })
+  from?: string;
+
+  @IsOptional()
+  @Matches(ISO_DAY, { message: '`to` must be a valid YYYY-MM-DD date' })
+  to?: string;
+}
+
+class ModerationNoteBody {
+  @IsDefined()
+  @IsString()
+  @MaxLength(1000)
+  body: string;
+}
+
+class UserRoleBody {
+  @IsIn(['USER', 'MODERATOR', 'ADMIN'])
+  role: 'USER' | 'MODERATOR' | 'ADMIN';
+}
+
 class PlayerResultBody {
   @IsString()
   userId: string;
@@ -163,7 +215,7 @@ export class AdminController {
 
   @Roles('MODERATOR', 'ADMIN')
   @Get('users')
-  users(@Query() query: AdminListQuery) {
+  users(@Query() query: UserListQuery) {
     return this.admin.users(query);
   }
 
@@ -171,6 +223,34 @@ export class AdminController {
   @Patch('users/:id/status')
   status(@CurrentUser() actor: AuthUser, @Param('id') id: string, @Body() dto: UserStatusBody) {
     return this.admin.setUserStatus(actor.id, id, dto.status, dto.reason);
+  }
+
+  @Roles('ADMIN')
+  @Patch('users/:id/role')
+  role(@CurrentUser() actor: AuthUser, @Param('id') id: string, @Body() dto: UserRoleBody) {
+    return this.admin.setUserRole(actor.id, id, dto.role);
+  }
+
+  @Roles('ADMIN')
+  @Post('users/:id/revoke-sessions')
+  revokeSessions(@CurrentUser() actor: AuthUser, @Param('id') id: string) {
+    return this.admin.revokeUserSessions(actor.id, id);
+  }
+
+  @Roles('MODERATOR', 'ADMIN')
+  @Get('users/:id/notes')
+  listNotes(@Param('id') id: string, @Query() query: PaginationQuery) {
+    return this.admin.listModerationNotes(id, query);
+  }
+
+  @Roles('MODERATOR', 'ADMIN')
+  @Post('users/:id/notes')
+  createNote(
+    @CurrentUser() actor: AuthUser,
+    @Param('id') id: string,
+    @Body() dto: ModerationNoteBody,
+  ) {
+    return this.admin.createModerationNote(actor.id, id, dto.body);
   }
 
   @Roles('MODERATOR', 'ADMIN')
@@ -273,7 +353,7 @@ export class AdminController {
 
   @Roles('ADMIN')
   @Get('audit')
-  audit(@Query() query: PaginationQuery) {
+  audit(@Query() query: AuditQuery) {
     return this.admin.auditLog(query);
   }
 }

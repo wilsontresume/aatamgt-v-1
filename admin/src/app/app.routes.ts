@@ -1,6 +1,6 @@
 import { Routes } from '@angular/router';
 import { Shell } from './layout/shell';
-import { loginGuard, staffGuard } from './core/staff.guard';
+import { adminGuard, loginGuard, staffGuard } from './core/staff.guard';
 
 export const routes: Routes = [
   {
@@ -21,6 +21,19 @@ export const routes: Routes = [
       {
         path: 'dashboard',
         loadComponent: () => import('./dashboard/dashboard').then((m) => m.DashboardPage),
+      },
+      {
+        path: 'users',
+        loadComponent: () => import('./users/user-list').then((m) => m.UserListPage),
+      },
+      {
+        path: 'users/:id',
+        loadComponent: () => import('./users/user-detail').then((m) => m.UserDetailPage),
+      },
+      {
+        path: 'audit',
+        canActivate: [adminGuard],
+        loadComponent: () => import('./audit/audit').then((m) => m.AuditPage),
       },
     ],
   },

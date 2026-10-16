@@ -91,3 +91,118 @@ export interface DashboardResponse {
       | null;
   };
 }
+
+// --- Phase C: user & account management --------------------------------------
+
+export interface Paginated<T> {
+  items: T[];
+  page: number;
+  limit: number;
+  total: number;
+}
+
+export interface UserStats {
+  wins: number;
+  losses: number;
+  draws: number;
+  gamesPlayed: number;
+  rating: number;
+  level: number;
+}
+
+export interface AdminUser {
+  id: string;
+  username: string;
+  email: string | null;
+  role: 'USER' | 'MODERATOR' | 'ADMIN';
+  status: 'ACTIVE' | 'SUSPENDED' | 'BANNED';
+  isGuest: boolean;
+  createdAt: string;
+  lastLoginAt: string | null;
+  stats: UserStats | null;
+}
+
+export interface ModerationNote {
+  id: string;
+  body: string;
+  createdAt: string;
+  author: { id: string; username: string };
+}
+
+export interface PlayerProfile {
+  displayName: string | null;
+  level: number;
+  xp: number;
+  rating: number;
+  wins: number;
+  losses: number;
+  draws: number;
+  gamesPlayed: number;
+}
+
+export interface PlayerDetail {
+  id: string;
+  username: string;
+  email: string | null;
+  role: 'USER' | 'MODERATOR' | 'ADMIN';
+  status: 'ACTIVE' | 'SUSPENDED' | 'BANNED';
+  isGuest: boolean;
+  royalPassExpiresAt: string | null;
+  lastLoginAt: string | null;
+  createdAt: string;
+  profile: PlayerProfile | null;
+  wallets: { currency: string; balance: number; lockedBalance: number }[];
+}
+
+export interface WalletTx {
+  id: string;
+  amount: number;
+  balanceAfter: number;
+  type: string;
+  memo: string | null;
+  createdAt: string;
+}
+
+export interface WalletPage extends Paginated<WalletTx> {
+  balance: number;
+}
+
+export interface MatchPlayerRow {
+  userId: string;
+  seat: number;
+  result: string;
+  score: number;
+  user: { username: string };
+}
+
+export interface PlayerMatchRow {
+  id: string;
+  status: string;
+  createdAt: string;
+  completedAt: string | null;
+  game: { key: string; name: string } | null;
+  players: MatchPlayerRow[];
+}
+
+export interface AuditRow {
+  id: string;
+  action: string;
+  actor: string;
+  actorId: string;
+  targetType: string | null;
+  targetId: string | null;
+  data: Record<string, unknown> | null;
+  createdAt: string;
+}
+
+export interface SessionRevokeResult {
+  userId: string;
+  sessionsRevoked: number;
+}
+
+export interface RoleChangeResult {
+  id: string;
+  username: string;
+  role: 'USER' | 'MODERATOR' | 'ADMIN';
+  sessionsRevoked: number;
+}

@@ -9,6 +9,10 @@
 
   <nav>
     <a routerLink="/dashboard" class="nav-link">Dashboard</a>
+    <a routerLink="/users" class="nav-link">Users</a>
+    @if (auth.user?.role === 'ADMIN') {
+      <a routerLink="/audit" class="nav-link">Audit</a>
+    }
   </nav>
 
   <div class="session">

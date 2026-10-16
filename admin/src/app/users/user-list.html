@@ -1,0 +1,122 @@
+<section class="page-head">
+  <div>
+    <h1>Users</h1>
+    <p class="sub">
+      Search accounts, inspect stats and open a profile for moderation actions.
+    </p>
+  </div>
+  <button class="ghost" (click)="load()" [disabled]="state() === 'loading'">Refresh</button>
+</section>
+
+<form class="filters" (ngSubmit)="applyFilters()">
+  <label class="grow">
+    Search
+    <input
+      type="search"
+      name="q"
+      [(ngModel)]="q"
+      placeholder="Username, email or exact player ID"
+    />
+  </label>
+  <label>
+    Account type
+    <select name="accountType" [(ngModel)]="accountType">
+      <option value="">All</option>
+      <option value="registered">Registered</option>
+      <option value="guest">Guest</option>
+    </select>
+  </label>
+  <label>
+    Status
+    <select name="status" [(ngModel)]="status">
+      <option value="">All</option>
+      <option value="ACTIVE">Active</option>
+      <option value="SUSPENDED">Suspended</option>
+      <option value="BANNED">Banned</option>
+    </select>
+  </label>
+  <div class="filter-actions">
+    <button type="submit" class="primary">Apply</button>
+    <button type="button" class="ghost" (click)="resetFilters()">Reset</button>
+  </div>
+</form>
+
+@if (state() === 'loading') {
+  <div class="panel state" role="status">
+    <div class="spinner"></div>
+    <p>Loading users…</p>
+  </div>
+} @else if (state() === 'error') {
+  <div class="panel state error" role="alert">
+    <h2>Could not load users</h2>
+    <p>{{ errorMessage() }}</p>
+    <button class="primary" (click)="load()">Retry</button>
+  </div>
+} @else {
+  <div class="panel">
+    <div class="table-head">
+      <h2>Accounts</h2>
+      <span class="muted">
+        {{ data()!.total }} total
+        @if (hasFilters) {
+          <em>(filtered)</em>
+        }
+      </span>
+    </div>
+    <table>
+      <thead>
+        <tr>
+          <th>User</th>
+          <th>Player ID</th>
+          <th>Type</th>
+          <th>Role</th>
+          <th>Status</th>
+          <th>Record</th>
+          <th class="num">Rating</th>
+          <th>Created (UTC)</th>
+          <th></th>
+        </tr>
+      </thead>
+      <tbody>
+        @for (user of data()!.items; track user.id) {
+          <tr>
+            <td>
+              <strong>{{ user.username }}</strong>
+              @if (user.email) {
+                <div class="muted small">{{ user.email }}</div>
+              }
+            </td>
+            <td class="mono">{{ user.id }}</td>
+            <td>{{ user.isGuest ? 'Guest' : 'Account' }}</td>
+            <td>
+              <span class="badge" [class.role-admin]="user.role === 'ADMIN'" [class.role-mod]="user.role === 'MODERATOR'">
+                {{ user.role }}
+              </span>
+            </td>
+            <td>
+              <span class="badge" [class.st-active]="user.status === 'ACTIVE'" [class.st-suspended]="user.status === 'SUSPENDED'" [class.st-banned]="user.status === 'BANNED'">
+                {{ user.status }}
+              </span>
+            </td>
+            <td>{{ statsLabel(user) }}</td>
+            <td class="num">{{ user.stats ? user.stats.rating : '—' }}</td>
+            <td class="mono">{{ user.createdAt | date: 'yyyy-MM-dd HH:mm' }}</td>
+            <td><a [routerLink]="['/users', user.id]">View</a></td>
+          </tr>
+        } @empty {
+          <tr>
+            <td colspan="9" class="muted">
+              No users match the current filters.
+            </td>
+          </tr>
+        }
+      </tbody>
+    </table>
+
+    <div class="pager">
+      <button class="ghost" (click)="prevPage()" [disabled]="page <= 1">Previous</button>
+      <span class="muted">Page {{ page }} of {{ totalPages }}</span>
+      <button class="ghost" (click)="nextPage()" [disabled]="page >= totalPages">Next</button>
+    </div>
+  </div>
+}
