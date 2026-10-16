@@ -159,6 +159,12 @@ export class MatchmakingService {
           rewardMultiplierBp: 10_000,
           minBalance: 0,
           rewardCoins: 0,
+          description: null,
+          color: null,
+          artAssetId: null,
+          displayOrder: 0,
+          active: true,
+          gameKey: null,
         },
         vsAi: match?.players.some((p) => p.isAi) ?? false,
       };

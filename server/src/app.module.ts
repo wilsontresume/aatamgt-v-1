@@ -33,6 +33,7 @@ import { AdminModule } from './admin/admin.module';
 import { AnalyticsModule } from './analytics/analytics.module';
 import { SystemConfigModule } from './config/system-config.module';
 import { MatchmakingModule } from './matchmaking/matchmaking.module';
+import { ContentModule } from './content/content.module';
 
 @Module({
   imports: [
@@ -76,6 +77,7 @@ import { MatchmakingModule } from './matchmaking/matchmaking.module';
     AdminModule,
     AnalyticsModule,
     MatchmakingModule,
+    ContentModule,
   ],
   providers: [
     {

@@ -54,6 +54,14 @@ export interface AppConfig {
     /** Development-only cosmetic grants. Always false in production. */
     devGrantsEnabled: boolean;
   };
+  assets: {
+    /** Storage driver: "local" (dev/self-hosted) or "s3" (production). */
+    driver: string;
+    /** Local adapter root directory (relative to the server cwd). */
+    localRoot: string;
+    /** Hard cap for one uploaded asset file. */
+    maxUploadBytes: number;
+  };
   iap: {
     /**
      * Development-only store simulator. Forced off in production —
@@ -136,6 +144,11 @@ export default registerAs<AppConfig>('app', () => {
       devGrantsEnabled:
         (process.env.NODE_ENV ?? 'development') !== 'production' &&
         bool(process.env.DEV_COSMETIC_GRANTS, true),
+    },
+    assets: {
+      driver: process.env.ASSET_STORAGE_DRIVER ?? 'local',
+      localRoot: process.env.ASSET_STORAGE_LOCAL_ROOT ?? 'storage/assets',
+      maxUploadBytes: num(process.env.ASSET_MAX_UPLOAD_BYTES, 5 * 1024 * 1024),
     },
     iap: {
       // Dev store simulator: opt-in outside production, structurally

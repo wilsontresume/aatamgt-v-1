@@ -193,7 +193,14 @@ static func capture_style(key: String) -> Dictionary:
 ## Pushes the equipped board palette onto a board control. Offline (or
 ## before the first fetch) the palette is empty and the board keeps its
 ## classic surface — defaults come from the server, never guessed here.
-func apply_board_skin(board: Node) -> void:
+## Phase E: `base_skin` (from App.content.board_skin, injected by the
+## caller) sits under the equipped cosmetic palette, so a staff-published
+## theme shows through until the player equips an overriding skin.
+func apply_board_skin(board: Node, base_skin: Dictionary = {}) -> void:
 	if board == null or not board.has_method("set_skin"):
 		return
-	board.set_skin(board_palette(equipped_key("BOARD_SKIN")))
+	var skin := base_skin.duplicate()
+	var equipped: Dictionary = board_palette(equipped_key("BOARD_SKIN"))
+	for k in equipped:
+		skin[k] = equipped[k]
+	board.set_skin(skin)

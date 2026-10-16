@@ -1,0 +1,620 @@
+<section class="page-head">
+  <div>
+    <h1>Content Studio</h1>
+    <p class="sub">
+      Game assets, board themes, tier cards and the published client manifest.
+      Publishing freezes a validated snapshot; rollback re-publishes an old one.
+    </p>
+  </div>
+  <button class="ghost" (click)="load()" [disabled]="state() === 'loading'">Refresh</button>
+</section>
+
+<nav class="tabs" aria-label="Content sections">
+  @for (t of tabs; track t.id) {
+    <button
+      type="button"
+      class="tab"
+      [class.active]="tab() === t.id"
+      (click)="selectTab(t.id)"
+    >
+      {{ t.label }}
+    </button>
+  }
+</nav>
+
+@if (state() === 'loading') {
+  <div class="panel state" role="status">
+    <div class="spinner"></div>
+    <p>Loading content studio…</p>
+  </div>
+} @else if (state() === 'error') {
+  <div class="panel state error" role="alert">
+    <h2>Could not load the content studio</h2>
+    <p>{{ errorMessage() }}</p>
+    <button class="primary" (click)="load()">Retry</button>
+  </div>
+} @else {
+  <!-- ============ GAMES ============ -->
+  @if (tab() === 'games') {
+    <div class="panel">
+      <div class="panel-head">
+        <h2>Games</h2>
+        <p>Order controls how cards appear in the client. Status hides or disables a game.</p>
+      </div>
+      @if (gameError) {
+        <p class="form-error" role="alert">{{ gameError }}</p>
+      }
+      <table>
+        <thead>
+          <tr>
+            <th>Order</th>
+            <th>Game</th>
+            <th>Key</th>
+            <th>Status</th>
+            <th>Board theme</th>
+            <th></th>
+          </tr>
+        </thead>
+        <tbody>
+          @for (g of games(); track g.key) {
+            <tr>
+              <td>
+                <input
+                  type="number"
+                  class="mini"
+                  [ngModel]="gameOrderDrafts[g.key]"
+                  (ngModelChange)="gameOrderDrafts[g.key] = $event"
+                  (blur)="saveGameOrder(g)"
+                  min="0"
+                  max="1000"
+                />
+              </td>
+              <td>
+                <strong>{{ g.name }}</strong>
+                <span class="muted"> · {{ g.minPlayers }}p</span>
+              </td>
+              <td><code>{{ g.key }}</code></td>
+              <td>
+                <select
+                  [ngModel]="g.status"
+                  (ngModelChange)="saveGameStatus(g, $event)"
+                  [disabled]="gameBusyKey === g.key"
+                >
+                  <option value="ACTIVE">ACTIVE</option>
+                  <option value="MAINTENANCE">MAINTENANCE</option>
+                  <option value="DISABLED">DISABLED</option>
+                </select>
+              </td>
+              <td>
+                @if (g.boardTheme?.surfaceColor || g.boardTheme?.backgroundAssetId) {
+                  <span class="pill ok">set</span>
+                  <button class="linkish" (click)="selectTab('board'); selectBoardGame(g.key)">
+                    edit
+                  </button>
+                } @else {
+                  <span class="pill">default</span>
+                  <button class="linkish" (click)="selectTab('board'); selectBoardGame(g.key)">
+                    design
+                  </button>
+                }
+              </td>
+              <td>
+                @if (gameBusyKey === g.key) {
+                  <span class="muted">saving…</span>
+                }
+              </td>
+            </tr>
+          }
+        </tbody>
+      </table>
+    </div>
+  }
+
+  <!-- ============ ASSETS ============ -->
+  @if (tab() === 'assets') {
+    <div class="panel">
+      <div class="panel-head">
+        <h2>Upload asset</h2>
+        <p>
+          Accepted: PNG, JPEG, WebP, GIF · 16–4096 px · signature-validated on the server.
+          Old versions are never deleted — replace creates a new immutable version.
+        </p>
+      </div>
+      <form class="upload-row" (ngSubmit)="uploadAsset()">
+        <label>
+          Image
+          <input type="file" accept="image/png,image/jpeg,image/webp,image/gif" (change)="onUploadFileSelected($event)" />
+        </label>
+        <label>
+          Type
+          <select name="type" [(ngModel)]="uploadType">
+            @for (t of assetTypes; track t) {
+              <option [value]="t">{{ t }}</option>
+            }
+          </select>
+        </label>
+        <label>
+          Game key <span class="muted">(blank = global)</span>
+          <input name="uploadGameKey" [(ngModel)]="uploadGameKey" placeholder="e.g. aadu-puli-aattam" />
+        </label>
+        <label>
+          Note
+          <input name="uploadNote" [(ngModel)]="uploadNote" placeholder="optional" />
+        </label>
+        <button type="submit" class="primary" [disabled]="uploadBusy || !uploadFile">
+          {{ uploadBusy ? `Uploading ${uploadProgress}%` : 'Upload' }}
+        </button>
+      </form>
+      @if (uploadBusy) {
+        <div class="progress"><div class="bar" [style.width.%]="uploadProgress"></div></div>
+      }
+      @if (uploadError) {
+        <p class="form-error" role="alert">{{ uploadError }}</p>
+      }
+      @if (uploadSuccess) {
+        <p class="form-ok" role="status">{{ uploadSuccess }}</p>
+      }
+    </div>
+
+    @if (replaceTarget) {
+      <div class="panel replace-panel">
+        <h3>Replace “{{ replaceTarget.originalName }}” ({{ replaceTarget.type }} v{{ replaceTarget.version }})</h3>
+        <p class="muted">
+          A new version is stored alongside the old one; manifests that already reference v{{
+            replaceTarget.version
+          }}
+          keep resolving.
+        </p>
+        <div class="upload-row">
+          <label>
+            New image
+            <input type="file" accept="image/png,image/jpeg,image/webp,image/gif" (change)="onReplaceFileSelected($event)" />
+          </label>
+          <button class="primary" (click)="confirmReplace()" [disabled]="replaceBusy || !replaceFile">
+            {{ replaceBusy ? 'Replacing…' : 'Confirm replace' }}
+          </button>
+          <button class="ghost" (click)="cancelReplace()">Cancel</button>
+        </div>
+        @if (replaceError) {
+          <p class="form-error" role="alert">{{ replaceError }}</p>
+        }
+      </div>
+    }
+
+    <div class="panel">
+      <div class="panel-head">
+        <h2>Asset library <span class="muted">({{ assetTotal() }})</span></h2>
+      </div>
+      <form class="filters" (ngSubmit)="reloadAssets()">
+        <label>
+          Game key
+          <input name="assetGameFilter" [(ngModel)]="assetGameFilter" placeholder="any" />
+        </label>
+        <label>
+          Type
+          <select name="assetTypeFilter" [(ngModel)]="assetTypeFilter">
+            <option value="">All types</option>
+            @for (t of assetTypes; track t) {
+              <option [value]="t">{{ t }}</option>
+            }
+          </select>
+        </label>
+        <label>
+          Active
+          <select name="assetActiveFilter" [(ngModel)]="assetActiveFilter">
+            <option value="">Any</option>
+            <option value="true">Active</option>
+            <option value="false">Inactive</option>
+          </select>
+        </label>
+        <button type="submit" class="primary">Filter</button>
+      </form>
+      <table>
+        <thead>
+          <tr>
+            <th>Preview</th>
+            <th>Type</th>
+            <th>Game</th>
+            <th>Version</th>
+            <th>Size</th>
+            <th>Checksum</th>
+            <th>State</th>
+            <th>Actions</th>
+          </tr>
+        </thead>
+        <tbody>
+          @for (a of assets(); track a.id) {
+            <tr>
+              <td>
+                <img class="thumb" [src]="a.url" [alt]="a.originalName" loading="lazy" />
+              </td>
+              <td>{{ a.type }}</td>
+              <td>{{ a.gameKey ?? '— global —' }}</td>
+              <td>v{{ a.version }}</td>
+              <td class="muted">{{ a.width }}×{{ a.height }} · {{ a.byteSize | number }} B</td>
+              <td><code class="tiny">{{ a.checksum.slice(0, 10) }}…</code></td>
+              <td>
+                @if (a.active) {
+                  <span class="pill ok">active</span>
+                } @else {
+                  <span class="pill off">inactive</span>
+                }
+              </td>
+              <td class="actions">
+                <button class="linkish" (click)="startReplace(a)">replace</button>
+                <button class="linkish" (click)="toggleAsset(a)">
+                  {{ a.active ? 'deactivate' : 'activate' }}
+                </button>
+              </td>
+            </tr>
+          } @empty {
+            <tr>
+              <td colspan="8" class="muted">No assets match the current filter.</td>
+            </tr>
+          }
+        </tbody>
+      </table>
+    </div>
+  }
+
+  <!-- ============ TIERS ============ -->
+  @if (tab() === 'tiers') {
+    <div class="panel">
+      <div class="panel-head">
+        <h2>Tiers</h2>
+        <p>
+          Entry cost and reward multiplier drive stakes and payouts. Matches snapshot the
+          multiplier at creation — later edits never touch in-flight matches.
+        </p>
+      </div>
+      @if (tierError) {
+        <p class="form-error" role="alert">{{ tierError }}</p>
+      }
+      <table>
+        <thead>
+          <tr>
+            <th>Order</th>
+            <th>Tier</th>
+            <th>Cost</th>
+            <th>Multiplier</th>
+            <th>Reward</th>
+            <th>Description</th>
+            <th>Color</th>
+            <th>Art asset</th>
+            <th>State</th>
+            <th></th>
+          </tr>
+        </thead>
+        <tbody>
+          @for (t of tiers(); track t.id) {
+            <tr>
+              <td class="muted">{{ t.displayOrder }}</td>
+              <td>
+                <strong>{{ t.label }}</strong>
+                <div class="muted tiny">{{ t.id }}</div>
+              </td>
+              <td>{{ t.costCoins | number }}c</td>
+              <td>{{ (t.rewardMultiplierBp / 10000).toFixed(2) }}×</td>
+              <td>{{ t.rewardCoins | number }}c</td>
+              <td>
+                <input
+                  class="wide"
+                  [ngModel]="tierDrafts[t.id]?.description"
+                  (ngModelChange)="tierDrafts[t.id] && (tierDrafts[t.id].description = $event)"
+                  placeholder="shown on the client tier card"
+                />
+              </td>
+              <td>
+                <input
+                  type="color"
+                  class="swatch"
+                  [ngModel]="tierDrafts[t.id]?.displayColor || '#3366ff'"
+                  (ngModelChange)="tierDrafts[t.id] && (tierDrafts[t.id].displayColor = $event)"
+                />
+              </td>
+              <td>
+                <select
+                  [ngModel]="tierDrafts[t.id]?.artAssetId"
+                  (ngModelChange)="tierDrafts[t.id] && (tierDrafts[t.id].artAssetId = $event)"
+                >
+                  <option value="">— none —</option>
+                  @for (asset of tierArtAssets; track asset.id) {
+                    <option [value]="asset.id">{{ asset.id }} (v{{ asset.version }})</option>
+                  }
+                </select>
+              </td>
+              <td>
+                @if (t.active) {
+                  <span class="pill ok">active</span>
+                } @else {
+                  <span class="pill off">inactive</span>
+                }
+              </td>
+              <td class="actions">
+                <button class="linkish" (click)="saveTierFields(t)" [disabled]="tierBusyId === t.id">
+                  save
+                </button>
+                <button class="linkish" (click)="toggleTier(t)" [disabled]="tierBusyId === t.id">
+                  {{ t.active ? 'disable' : 'enable' }}
+                </button>
+              </td>
+            </tr>
+          }
+        </tbody>
+      </table>
+    </div>
+
+    @if (isAdmin) {
+      <div class="panel">
+        <div class="panel-head">
+          <h2>Create tier</h2>
+        </div>
+        <form class="upload-row" (ngSubmit)="createTier()">
+          <label>
+            Id
+            <input name="tierId" [(ngModel)]="newTier.id" placeholder="bronze-plus" />
+          </label>
+          <label>
+            Name
+            <input name="tierName" [(ngModel)]="newTier.name" />
+          </label>
+          <label>
+            Cost (coins)
+            <input type="number" name="tierCost" [(ngModel)]="newTier.entryCostCoins" min="0" />
+          </label>
+          <label>
+            Multiplier (bp)
+            <input type="number" name="tierMult" [(ngModel)]="newTier.rewardMultiplierBp" min="10000" />
+          </label>
+          <label>
+            Order
+            <input type="number" name="tierOrder" [(ngModel)]="newTier.displayOrder" min="0" />
+          </label>
+          <button type="submit" class="primary" [disabled]="newTierBusy">
+            {{ newTierBusy ? 'Creating…' : 'Create' }}
+          </button>
+        </form>
+        @if (newTierError) {
+          <p class="form-error" role="alert">{{ newTierError }}</p>
+        }
+      </div>
+    }
+  }
+
+  <!-- ============ BOARD DESIGNER ============ -->
+  @if (tab() === 'board') {
+    <div class="panel">
+      <div class="panel-head">
+        <h2>Board Designer</h2>
+        <p>
+          Visual skin only — colors and asset references. Board geometry and game rules are
+          untouched by this screen.
+        </p>
+      </div>
+      <label class="block-label">
+        Game
+        <select [ngModel]="boardGameKey" (ngModelChange)="selectBoardGame($event)">
+          @for (g of boardGames; track g.key) {
+            <option [value]="g.key">{{ g.name }} ({{ g.key }})</option>
+          }
+        </select>
+      </label>
+      <div class="theme-grid">
+        <label>
+          Surface color
+          <input type="color" [(ngModel)]="boardTheme.surfaceColor" />
+        </label>
+        <label>
+          Border color
+          <input type="color" [(ngModel)]="boardTheme.borderColor" />
+        </label>
+        <label>
+          Accent color
+          <input type="color" [(ngModel)]="boardTheme.accentColor" />
+        </label>
+        <label>
+          Board background
+          <select [(ngModel)]="boardTheme.backgroundAssetId">
+            <option value="">— procedural default —</option>
+            @for (asset of boardThemeAssets; track asset.id) {
+              @if (asset.type === 'BOARD_BACKGROUND') {
+                <option [value]="asset.id">{{ asset.id }} (v{{ asset.version }})</option>
+              }
+            }
+          </select>
+        </label>
+        <label>
+          Board texture
+          <select [(ngModel)]="boardTheme.textureAssetId">
+            <option value="">— none —</option>
+            @for (asset of boardThemeAssets; track asset.id) {
+              @if (asset.type === 'BOARD_TEXTURE') {
+                <option [value]="asset.id">{{ asset.id }} (v{{ asset.version }})</option>
+              }
+            }
+          </select>
+        </label>
+        <label>
+          Piece art
+          <select [(ngModel)]="boardTheme.pieceAssetId">
+            <option value="">— procedural default —</option>
+            @for (asset of boardThemeAssets; track asset.id) {
+              @if (asset.type === 'PIECE_ART') {
+                <option [value]="asset.id">{{ asset.id }} (v{{ asset.version }})</option>
+              }
+            }
+          </select>
+        </label>
+      </div>
+      <div class="theme-actions">
+        <button
+          class="primary"
+          (click)="saveBoardTheme()"
+          [disabled]="boardBusy || !isAdmin"
+          [title]="isAdmin ? '' : 'ADMIN role required'"
+        >
+          {{ boardBusy ? 'Saving…' : 'Save board theme' }}
+        </button>
+        @if (boardError) {
+          <span class="form-error" role="alert">{{ boardError }}</span>
+        }
+        @if (boardSuccess) {
+          <span class="form-ok" role="status">{{ boardSuccess }}</span>
+        }
+      </div>
+    </div>
+  }
+
+  <!-- ============ PUBLISH ============ -->
+  @if (tab() === 'publish') {
+    @if (current(); as cur) {
+      <div class="panel banner">
+        <div>
+          <h2>
+            @if (cur.published) {
+              Live: v{{ cur.version }}
+            } @else {
+              Nothing published yet
+            }
+          </h2>
+          @if (cur.published) {
+            <p class="muted">
+              checksum <code>{{ cur.checksum?.slice(0, 16) }}…</code>
+              · by {{ cur.publishedBy }}
+              · {{ cur.publishedAt | date: 'medium' }}
+              @if (cur.rolledBackFrom) {
+                · rolled back from v{{ cur.rolledBackFrom }}
+              }
+            </p>
+          }
+        </div>
+      </div>
+    }
+
+    <div class="panel">
+      <div class="panel-head">
+        <h2>Draft (live database state)</h2>
+        <p>Never served to ordinary clients until you publish.</p>
+      </div>
+      @if (draft(); as d) {
+        <ul class="draft-summary">
+          <li><strong>{{ d.games.length }}</strong> games</li>
+          <li><strong>{{ d.tiers.length }}</strong> tiers</li>
+          <li><strong>{{ objectCount(d.assets) }}</strong> assets referenced</li>
+        </ul>
+      }
+      @if (validation(); as v) {
+        @if (v.ok) {
+          <p class="form-ok" role="status">Validation passed — ready to publish.</p>
+        } @else {
+          <div class="validation-block errors">
+            <strong>Validation failed — fix these before publishing:</strong>
+            <ul>
+              @for (e of v.errors; track e) {
+                <li>{{ e }}</li>
+              }
+            </ul>
+          </div>
+        }
+        @if (v.warnings.length) {
+          <div class="validation-block warnings">
+            <strong>Warnings (non-blocking):</strong>
+            <ul>
+              @for (w of v.warnings; track w) {
+                <li>{{ w }}</li>
+              }
+            </ul>
+          </div>
+        }
+      }
+      @if (isAdmin) {
+        <div class="publish-row">
+          <input
+            name="publishNote"
+            [(ngModel)]="publishNote"
+            placeholder="optional release note"
+          />
+          <button
+            class="primary"
+            (click)="publishNow()"
+            [disabled]="publishBusy || !validation()?.ok"
+          >
+            {{ publishBusy ? 'Publishing…' : 'Publish now' }}
+          </button>
+        </div>
+      }
+      @if (publishError) {
+        <p class="form-error" role="alert">{{ publishError }}</p>
+      }
+      @if (publishSuccess) {
+        <p class="form-ok" role="status">{{ publishSuccess }}</p>
+      }
+    </div>
+
+    <div class="panel">
+      <div class="panel-head">
+        <h2>Publications</h2>
+        <p>Every publish and rollback, newest first. Rollback re-publishes the old manifest verbatim.</p>
+      </div>
+      @if (rollbackError) {
+        <p class="form-error" role="alert">{{ rollbackError }}</p>
+      }
+      <table>
+        <thead>
+          <tr>
+            <th>Version</th>
+            <th>Status</th>
+            <th>Note</th>
+            <th>Contents</th>
+            <th>Checksum</th>
+            <th>By</th>
+            <th>When</th>
+            <th></th>
+          </tr>
+        </thead>
+        <tbody>
+          @for (row of publications(); track row.version) {
+            <tr>
+              <td><strong>v{{ row.version }}</strong></td>
+              <td>
+                @if (row.status === 'PUBLISHED') {
+                  <span class="pill ok">live</span>
+                } @else {
+                  <span class="pill off">{{ row.status.toLowerCase() }}</span>
+                }
+              </td>
+              <td>
+                {{ row.note || '—' }}
+                @if (row.rolledBackFrom) {
+                  <div class="muted tiny">rollback of v{{ row.rolledBackFrom }}</div>
+                }
+              </td>
+              <td class="muted">
+                {{ row.summary.games }} games · {{ row.summary.tiers }} tiers ·
+                {{ row.summary.assets }} assets
+              </td>
+              <td><code class="tiny">{{ row.checksum.slice(0, 10) }}…</code></td>
+              <td>{{ row.publishedBy }}</td>
+              <td class="muted">{{ row.publishedAt | date: 'short' }}</td>
+              <td>
+                @if (isAdmin && row.status !== 'PUBLISHED') {
+                  <button
+                    class="linkish"
+                    (click)="rollbackTo(row.version)"
+                    [disabled]="rollbackBusyVersion !== null"
+                  >
+                    {{ rollbackBusyVersion === row.version ? 'rolling back…' : 'rollback' }}
+                  </button>
+                }
+              </td>
+            </tr>
+          } @empty {
+            <tr>
+              <td colspan="8" class="muted">No publications yet.</td>
+            </tr>
+          }
+        </tbody>
+      </table>
+    </div>
+  }
+}

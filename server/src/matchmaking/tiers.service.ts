@@ -9,6 +9,12 @@ export interface GameTier {
   rewardMultiplierBp: number;
   minBalance: number;
   rewardCoins: number;
+  description: string | null;
+  color: string | null;
+  artAssetId: string | null;
+  displayOrder: number;
+  active: boolean;
+  gameKey: string | null;
 }
 
 function toGameTier(row: Tier): GameTier {
@@ -21,8 +27,16 @@ function toGameTier(row: Tier): GameTier {
     rewardMultiplierBp: multBp,
     minBalance: costCoins,
     rewardCoins: Math.floor((costCoins * multBp) / 10_000),
+    description: row.description,
+    color: row.displayColor,
+    artAssetId: row.artAssetId,
+    displayOrder: row.displayOrder,
+    active: row.active,
+    gameKey: row.gameKey,
   };
 }
+
+const HEX_COLOR = /^#[0-9a-fA-F]{6}$/;
 
 /**
  * DB-backed virtual-coin tiers. Active tiers are served to players via
@@ -32,6 +46,23 @@ function toGameTier(row: Tier): GameTier {
 @Injectable()
 export class TiersService {
   constructor(private readonly prisma: PrismaService) {}
+
+  private async validateDisplayFields(input: {
+    displayColor?: string | null;
+    artAssetId?: string | null;
+  }): Promise<void> {
+    if (input.displayColor != null && !HEX_COLOR.test(input.displayColor)) {
+      throw new BadRequestException('displayColor must be a #rrggbb color');
+    }
+    if (input.artAssetId != null && input.artAssetId !== '') {
+      const asset = await this.prisma.gameAsset.findUnique({
+        where: { id: input.artAssetId },
+      });
+      if (!asset || asset.type !== 'TIER_ART') {
+        throw new BadRequestException('artAssetId must reference a TIER_ART asset');
+      }
+    }
+  }
 
   /** Active tiers for the game-entry screen, ordered by displayOrder. */
   async list(gameKey?: string): Promise<GameTier[]> {
@@ -81,16 +112,23 @@ export class TiersService {
     id: string;
     name: string;
     gameKey?: string | null;
+    description?: string | null;
+    displayColor?: string | null;
+    artAssetId?: string | null;
     entryCostCoins: number;
     rewardMultiplierBp: number;
     displayOrder: number;
     active?: boolean;
   }): Promise<Tier> {
+    await this.validateDisplayFields(input);
     return this.prisma.tier.create({
       data: {
         id: input.id,
         name: input.name,
         gameKey: input.gameKey ?? null,
+        description: input.description ?? null,
+        displayColor: input.displayColor ?? null,
+        artAssetId: input.artAssetId ?? null,
         entryCostCoins: input.entryCostCoins,
         rewardMultiplierBp: input.rewardMultiplierBp,
         displayOrder: input.displayOrder,
@@ -104,6 +142,9 @@ export class TiersService {
     patch: Partial<{
       name: string;
       gameKey: string | null;
+      description: string | null;
+      displayColor: string | null;
+      artAssetId: string | null;
       entryCostCoins: number;
       rewardMultiplierBp: number;
       displayOrder: number;
@@ -111,6 +152,7 @@ export class TiersService {
     }>,
   ): Promise<Tier> {
     await this.adminGet(id);
+    await this.validateDisplayFields(patch);
     return this.prisma.tier.update({ where: { id }, data: patch });
   }
 

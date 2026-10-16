@@ -10,3 +10,6 @@ coverage/
 dev-certs/
 *.db
 *.sqlite
+
+# Asset storage (Phase E)
+storage/

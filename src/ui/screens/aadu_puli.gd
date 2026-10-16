@@ -128,7 +128,8 @@ func _ready() -> void:
 		if _online_row != null:
 			_online_row.visible = false
 		_set_online_mode()
-	App.cosmetics.apply_board_skin(_board)
+	App.cosmetics.apply_board_skin(_board,
+			App.content.board_skin("aadu-puli-aattam"))
 	_refresh()
 
 

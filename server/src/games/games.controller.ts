@@ -1,6 +1,7 @@
 import { Body, Controller, Get, Param, Patch, Post } from '@nestjs/common';
 import {
   IsInt,
+  IsObject,
   IsIn,
   IsOptional,
   IsString,
@@ -85,6 +86,19 @@ class UpdateGameBody implements UpdateGameDto {
   @Min(1)
   @Max(1000)
   rulesVersion?: number;
+
+  @IsOptional()
+  @IsInt()
+  @Min(0)
+  @Max(1000)
+  displayOrder?: number;
+
+  // Visual-only board theme: { backgroundAssetId, textureAssetId,
+  // pieceAssetId, surfaceColor, borderColor, accentColor }. Keys are
+  // whitelisted in GamesService; geometry and rules are never affected.
+  @IsOptional()
+  @IsObject()
+  boardTheme?: Record<string, unknown> | null;
 }
 
 @Controller('games')
@@ -95,6 +109,14 @@ export class GamesController {
   @Get()
   async list() {
     const games = await this.games.list();
+    return { items: games.map((g) => this.games.serialize(g)) };
+  }
+
+  /** Staff list including MAINTENANCE/DISABLED games. */
+  @Roles('MODERATOR', 'ADMIN')
+  @Get('admin')
+  async adminList() {
+    const games = await this.games.list(true);
     return { items: games.map((g) => this.games.serialize(g)) };
   }
 

@@ -287,6 +287,9 @@ func _run() -> void:
 	# --- Workflow Change 2: multiplayer-first entry (tiers/queue) ----
 	await _test_workflow2_entry()
 
+	# --- Phase E: content manifest client (parse/cache/fallback) ----
+	_test_phase_e_content()
+
 	_finish()
 
 
@@ -471,6 +474,151 @@ func _test_workflow2_entry() -> void:
 		social_methods.append(str(m.get("name", "")))
 	_check(social_methods.has("create_challenge"),
 			"SocialService still exposes create_challenge")
+
+
+## Phase E content client contract: ContentService/ContentManifest parse
+## a published envelope, tolerate garbage, verify checksums, map screens
+## to game keys, and fall back cleanly when nothing has been published.
+func _test_phase_e_content() -> void:
+	_check(_app.content is ContentService, "App exposes the ContentService")
+	_check(_app.content.has_signal("manifest_changed"),
+			"ContentService reports manifest updates")
+	_check(_app.content.has_signal("asset_ready"),
+			"ContentService reports downloaded assets")
+
+	# --- Manifest parsing (valid envelope) ------------------------------
+	var fixture := {
+		"version": 3,
+		"checksum": "abc123",
+		"publishedAt": "2026-10-16T00:00:00Z",
+		"manifest": {
+			"version": 3,
+			"generatedAt": "2026-10-16T00:00:00Z",
+			"home": {"background": {"id": "ga" + "a".repeat(28)}},
+			"games": [
+				{
+					"key": "aadu-puli-aattam",
+					"status": "ACTIVE",
+					"displayOrder": 0,
+					"card": {"id": "ga" + "b".repeat(28)},
+					"icon": null,
+					"background": null,
+					"boardTheme": {
+						"background": null,
+						"texture": null,
+						"piece": null,
+						"surfaceColor": "#1d2a1e",
+						"borderColor": "#7a9464",
+						"accentColor": "#e8b54a",
+					},
+				},
+				{"key": "solah-seedi", "status": "ACTIVE", "displayOrder": 1,
+					"boardTheme": {}},
+			],
+			"tiers": [
+				{
+					"id": "bronze",
+					"name": "Bronze",
+					"description": "Learn the ropes",
+					"color": "#c96a20",
+					"art": {"id": "ga" + "c".repeat(28)},
+					"active": true,
+				},
+			],
+			"assets": {
+				"ga" + "a".repeat(28): {"checksum": "f".repeat(64),
+					"mimeType": "image/png"},
+			},
+		},
+	}
+	var m := ContentManifest.parse_envelope(fixture)
+	_check(not m.is_empty(), "parse_envelope accepts a valid publication")
+	_check(m.envelope_version == 3, "envelope version is exposed")
+	_check(m.envelope_checksum == "abc123", "envelope checksum is exposed")
+	_check(m.games().size() == 2, "games are listed")
+	_check(m.game_entry("aadu-puli-aattam").get("status", "") == "ACTIVE",
+			"game_entry finds a game by key")
+	_check(m.games_ordered().size() == 2, "games_ordered lists entries")
+	_check(m.home_background_id() == "ga" + "a".repeat(28),
+			"home background ref resolves")
+	_check(m.game_card_id("aadu-puli-aattam") == "ga" + "b".repeat(28),
+			"game card ref resolves")
+	_check(m.asset_checksum("ga" + "a".repeat(28)) == "f".repeat(64),
+			"asset checksum resolves")
+
+	# Board skin colors parse to Colors; bad colors are dropped.
+	var skin: Dictionary = m.board_skin("aadu-puli-aattam")
+	_check(skin.has("bg") and (skin["bg"] as Color).is_equal_approx(Color("1d2a1e")),
+			"board_skin exposes surfaceColor as bg")
+	_check(skin.has("line") and (skin["line"] as Color).is_equal_approx(Color("7a9464")),
+			"board_skin exposes borderColor as line")
+	_check(skin.has("accent"), "board_skin exposes accentColor")
+	var m2 := ContentManifest.parse_envelope({"version": 1, "manifest": {
+		"version": 1,
+		"games": [{"key": "k", "status": "ACTIVE",
+			"boardTheme": {"surfaceColor": "not-a-color",
+				"borderColor": "#zzzzzz"}}],
+		"tiers": [], "assets": {},
+	}})
+	var bad_skin: Dictionary = m2.board_skin("k")
+	_check(bad_skin.is_empty(), "invalid boardTheme colors are dropped")
+
+	# Tier display fields.
+	var td: Dictionary = m.tier_display("bronze")
+	_check(td.get("name", "") == "Bronze", "tier_display exposes the name")
+	_check(td.get("description", "") == "Learn the ropes",
+			"tier_display exposes the description")
+	_check(td.get("color") is Color, "tier_display exposes a Color")
+	_check(str(td.get("art_id", "")) == "ga" + "c".repeat(28),
+			"tier_display exposes art ref")
+	var by_name: Dictionary = m.tier_display_by_name("Bronze")
+	_check(by_name.get("name", "") == "Bronze",
+			"tier_display_by_name matches case-insensitively")
+
+	# --- Garbage / empty input ------------------------------------------
+	var empty := ContentManifest.parse_envelope({})
+	_check(empty.is_empty(), "parse_envelope rejects an empty envelope")
+	var garbage := ContentManifest.parse_envelope({"manifest": "nope"})
+	_check(garbage.is_empty(), "parse_envelope rejects a non-dict manifest")
+	var no_games := ContentManifest.parse_envelope({"manifest": {"version": 1}})
+	_check(no_games.is_empty(), "parse_envelope requires a games array")
+
+	# --- Screen id mapping ----------------------------------------------
+	_check(ContentManifest.screen_game_key("aadu_puli") == "aadu-puli-aattam",
+			"screen id maps to the aadu-puli game key")
+	_check(ContentManifest.screen_game_key("solah_seedi") == "solah-seedi",
+			"screen id maps to the solah-seedi game key")
+	_check(ContentManifest.screen_game_key("nine_mens_morris") == "nine-mens-morris",
+			"screen id maps to the nine-mens-morris game key")
+
+	# --- Checksum + validation helpers ----------------------------------
+	_check(ContentManifest.sha256_hex("".to_utf8_buffer()) == "",
+			"sha256_hex of empty input is empty")
+	var digest := ContentManifest.sha256_hex("abc".to_utf8_buffer())
+	_check(digest == "ba7816bf8f01cfea414140de5dae2223b00361a396177a9cb410ff61f20015ad",
+			"sha256_hex matches the known digest of 'abc'")
+	_check(ContentManifest.is_hex_color("#a1b2c3"), "is_hex_color accepts #rrggbb")
+	_check(not ContentManifest.is_hex_color("a1b2c3"), "is_hex_color requires #")
+	_check(not ContentManifest.is_hex_color("#zzzzzz"), "is_hex_color rejects non-hex")
+	_check(ContentManifest.is_asset_id("ga" + "0".repeat(28)),
+			"is_asset_id accepts a well-formed id")
+	_check(not ContentManifest.is_asset_id("../../etc/passwd"),
+			"is_asset_id rejects path traversal")
+	_check(not ContentManifest.is_asset_id(""), "is_asset_id rejects empty")
+
+	# --- Cache fallback: service starts empty and tolerates offline ----
+	_check(_app.content.get_manifest() is ContentManifest,
+			"ContentService always returns a ContentManifest")
+	_check(_app.content.version() >= 0, "content version is non-negative")
+	_check(_app.content.tier_display("does-not-exist").is_empty(),
+			"tier_display of an unknown tier is empty")
+	_check(_app.content.texture_for("not-an-id") == null,
+			"texture_for rejects malformed asset ids")
+	_check(_app.content.texture_for("ga" + "0".repeat(28)) == null,
+			"texture_for of an unknown asset is null (offline safe)")
+	_check(_app.content.board_skin("aadu-puli-aattam").is_empty()
+			or _app.content.board_skin("aadu-puli-aattam") is Dictionary,
+			"board_skin never returns null")
 
 
 ## Phase 12 cosmetic inventory contract: the client renders the

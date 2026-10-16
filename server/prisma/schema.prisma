@@ -161,6 +161,11 @@ model Game {
   status                 GameStatus @default(ACTIVE)
   rulesVersion           Int        @default(1)
   requiresAuthoritativeState Boolean @default(true)
+  /// Home-screen carousel order (lower first). Content-only; never
+  /// affects rules or matchmaking.
+  displayOrder           Int        @default(0)
+  /// Optional JSON config. Phase E stores visual board theme here
+  /// (boardTheme: colors + asset ids) — never geometry or rules.
   config                 Json?
   createdAt              DateTime   @default(now())
   updatedAt              DateTime   @updatedAt
@@ -175,6 +180,12 @@ model Tier {
   id                 String   @id @db.VarChar(64)
   name               String   @db.VarChar(64)
   gameKey            String?  @db.VarChar(64)
+  description        String?  @db.VarChar(255)
+  /// Display-only hex color (e.g. "#cd7f32"). Never used for economy.
+  displayColor       String?  @db.VarChar(32)
+  /// Optional TIER_ART asset id (GameAsset.id, no FK — assets may be
+  /// replaced while historical tiers keep referencing the lineage).
+  artAssetId         String?  @db.VarChar(64)
   entryCostCoins     Int      @default(0)
   rewardMultiplierBp Int      @default(10000)
   active             Boolean  @default(true)
@@ -184,6 +195,83 @@ model Tier {
 
   @@index([active, displayOrder])
   @@index([gameKey, active])
+}
+
+// ---------------------------------------------------------------------------
+// Content (Phase E) — admin-managed assets + published manifests
+// ---------------------------------------------------------------------------
+
+enum AssetType {
+  HOME_BACKGROUND
+  GAME_BACKGROUND
+  GAME_CARD
+  GAME_ICON
+  BOARD_TEXTURE
+  BOARD_BACKGROUND
+  PIECE_ART
+  TIER_ART
+  BANNER
+  DECORATION
+}
+
+/// One immutable uploaded image. Replacing an asset creates a NEW row in
+/// the same lineage (version+1) — the old row and its file stay intact so
+/// a published manifest can never lose its bytes. Files live in storage
+/// under a randomized key; binaries never enter MySQL.
+model GameAsset {
+  id              String    @id @default(cuid())
+  /// null = global asset (e.g. HOME_BACKGROUND / BANNER for the shell).
+  gameKey         String?   @db.VarChar(64)
+  type            AssetType
+  /// Randomized storage key, e.g. "ab/cd0123....png". Never a user filename.
+  storageKey      String    @unique @db.VarChar(191)
+  originalName    String    @db.VarChar(255)
+  mimeType        String    @db.VarChar(64)
+  byteSize        Int
+  width           Int?
+  height          Int?
+  /// sha256 hex of the file bytes — client cache validation + integrity.
+  checksum        String    @db.VarChar(64)
+  active          Boolean   @default(true)
+  version         Int       @default(1)
+  /// Shared id across replacements: lineage root is the first upload.
+  lineageId       String    @db.VarChar(64)
+  note            String?   @db.VarChar(255)
+  createdByUserId String?   @db.VarChar(64)
+  createdAt       DateTime  @default(now())
+  updatedAt       DateTime  @updatedAt
+
+  @@index([gameKey, type, active])
+  @@index([lineageId, version])
+  @@index([type, active])
+}
+
+enum PublicationStatus {
+  PUBLISHED
+  SUPERSEDED
+}
+
+/// Immutable snapshot of a validated content manifest. "Current" = the
+/// single PUBLISHED row (publish flips the previous row to SUPERSEDED in
+/// the same transaction, so clients never observe a half-published state).
+/// Rollback re-publishes an older manifest as a NEW version.
+model ContentPublication {
+  id                String            @id @default(cuid())
+  version           Int               @unique
+  status            PublicationStatus @default(PUBLISHED)
+  /// Frozen manifest JSON exactly as clients received it.
+  manifest          Json
+  /// sha256 of the canonical manifest JSON.
+  checksum          String            @db.VarChar(64)
+  note              String?           @db.VarChar(255)
+  /// Set when this version was created by a rollback (source version).
+  rolledBackFrom    Int?
+  publishedByUserId String?           @db.VarChar(64)
+  /// Denormalized actor name so history survives user deletion.
+  publishedByName   String            @default("system") @db.VarChar(64)
+  createdAt         DateTime          @default(now())
+
+  @@index([status, version])
 }
 
 // ---------------------------------------------------------------------------
@@ -220,6 +308,11 @@ model GameMatch {
   status       MatchStatus @default(PENDING)
   mode         MatchMode   @default(CASUAL)
   stakeCoins   Int         @default(0)
+  /// Reward multiplier (basis points) snapshotted from the Tier when the
+  /// match was created. Settlement prefers this so later tier edits can
+  /// never retroactively change an ongoing match's payout. Null only on
+  /// matches created before this column existed (fallback: live tier).
+  rewardMultiplierBp Int?
   tierId       String?
   stateVersion Int         @default(0)
   serverState  Json?

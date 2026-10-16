@@ -28,6 +28,21 @@ class CreateTierBody {
   @Matches(/^[a-z0-9-]{3,64}$/)
   gameKey?: string;
 
+  @IsOptional()
+  @IsString()
+  @MaxLength(255)
+  description?: string;
+
+  @IsOptional()
+  @IsString()
+  @Matches(/^#[0-9a-fA-F]{6}$/)
+  displayColor?: string;
+
+  @IsOptional()
+  @IsString()
+  @MaxLength(64)
+  artAssetId?: string;
+
   @IsInt()
   @Min(0)
   @Max(1_000_000)
@@ -58,6 +73,21 @@ class UpdateTierBody {
   @IsString()
   @Matches(/^[a-z0-9-]{3,64}$/)
   gameKey?: string;
+
+  @IsOptional()
+  @IsString()
+  @MaxLength(255)
+  description?: string;
+
+  @IsOptional()
+  @IsString()
+  @Matches(/^#[0-9a-fA-F]{6}$/)
+  displayColor?: string;
+
+  @IsOptional()
+  @IsString()
+  @MaxLength(64)
+  artAssetId?: string;
 
   @IsOptional()
   @IsInt()
@@ -113,6 +143,9 @@ export class TiersAdminController {
       id: dto.id,
       name: dto.name,
       gameKey: dto.gameKey ?? null,
+      description: dto.description ?? null,
+      displayColor: dto.displayColor ?? null,
+      artAssetId: dto.artAssetId ?? null,
       entryCostCoins: dto.entryCostCoins,
       rewardMultiplierBp: dto.rewardMultiplierBp,
       displayOrder: dto.displayOrder,
@@ -121,6 +154,9 @@ export class TiersAdminController {
     await this.admin.audit(actor.id, 'tier.create', 'tier', tier.id, {
       id: tier.id,
       name: tier.name,
+      description: tier.description,
+      displayColor: tier.displayColor,
+      artAssetId: tier.artAssetId,
       entryCostCoins: tier.entryCostCoins,
       rewardMultiplierBp: tier.rewardMultiplierBp,
       displayOrder: tier.displayOrder,
@@ -141,6 +177,9 @@ export class TiersAdminController {
     await this.admin.audit(actor.id, 'tier.update', 'tier', id, {
       before: {
         name: before.name,
+        description: before.description,
+        displayColor: before.displayColor,
+        artAssetId: before.artAssetId,
         entryCostCoins: before.entryCostCoins,
         rewardMultiplierBp: before.rewardMultiplierBp,
         displayOrder: before.displayOrder,
@@ -148,6 +187,9 @@ export class TiersAdminController {
       },
       after: {
         name: tier.name,
+        description: tier.description,
+        displayColor: tier.displayColor,
+        artAssetId: tier.artAssetId,
         entryCostCoins: tier.entryCostCoins,
         rewardMultiplierBp: tier.rewardMultiplierBp,
         displayOrder: tier.displayOrder,

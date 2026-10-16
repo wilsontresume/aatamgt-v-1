@@ -27,6 +27,12 @@ func _ready() -> void:
 	gui_input.connect(_on_gui_input)
 	_refresh_style()
 	_animate_scale(_target_scale(), 0.22)
+	# Phase E: published card art from the content manifest (procedural
+	# art stays the fallback; texture draws on top once downloaded).
+	if App != null and App.content != null:
+		if not App.content.asset_ready.is_connected(_on_asset_ready):
+			App.content.asset_ready.connect(_on_asset_ready)
+		var _tex := App.content.card_texture(String(game_id))
 
 
 func _target_scale() -> Vector2:
@@ -35,6 +41,11 @@ func _target_scale() -> Vector2:
 
 func _on_resized() -> void:
 	queue_redraw()
+
+
+func _on_asset_ready(_asset_id: String) -> void:
+	if is_inside_tree():
+		queue_redraw()
 
 
 func _on_gui_input(event: InputEvent) -> void:
@@ -99,15 +110,22 @@ func _draw() -> void:
 	var title_h := 44.0
 	var scene_rect := Rect2(art.position, Vector2(art.size.x, art.size.y - title_h))
 
-	match game_id:
-		&"aadu_puli":
-			_draw_aadu_puli(scene_rect)
-		&"solah_seedi":
-			_draw_solah_seedi(scene_rect)
-		&"nine_mens_morris":
-			_draw_morris(scene_rect)
-		_:
-			draw_rect(scene_rect, base_color)
+	# Published card art (when present) draws over the procedural scene.
+	var card_tex: Texture2D = null
+	if App != null and App.content != null:
+		card_tex = App.content.card_texture(String(game_id))
+	if card_tex != null:
+		draw_texture_rect(card_tex, scene_rect, true)
+	else:
+		match game_id:
+			&"aadu_puli":
+				_draw_aadu_puli(scene_rect)
+			&"solah_seedi":
+				_draw_solah_seedi(scene_rect)
+			&"nine_mens_morris":
+				_draw_morris(scene_rect)
+			_:
+				draw_rect(scene_rect, base_color)
 
 	# Title strip with dark scrim for readability.
 	var strip := Rect2(art.position + Vector2(0, art.size.y - title_h),

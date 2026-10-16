@@ -87,11 +87,15 @@ export class MatchesService {
 
     // Server-authoritative stake: when a tier is selected the DB tier is the
     // only source of the stake amount — client-sent stakeCoins is ignored.
+    // The tier's multiplier is snapshotted so later tier edits cannot change
+    // the payout of matches already in progress.
     let stakeCoins = Math.max(0, Math.floor(dto.stakeCoins ?? 0));
     let tierId: string | null = dto.tierId ?? null;
+    let rewardMultiplierBp: number | null = null;
     if (tierId) {
       const tier = await this.tiers.requireActiveForGame(tierId, game.key);
       stakeCoins = tier.costCoins;
+      rewardMultiplierBp = tier.rewardMultiplierBp;
       tierId = tier.id;
     }
 
@@ -102,6 +106,7 @@ export class MatchesService {
         mode: dto.mode ?? 'CASUAL',
         stakeCoins,
         tierId,
+        rewardMultiplierBp,
         createdByUserId: userId,
         players: { create: { userId, seat: 0 } },
       },
@@ -126,9 +131,11 @@ export class MatchesService {
     // Server-authoritative stake (same rule as create()).
     let stakeCoins = Math.max(0, Math.floor(dto.stakeCoins ?? 0));
     let tierId: string | null = dto.tierId ?? null;
+    let rewardMultiplierBp: number | null = null;
     if (tierId) {
       const tier = await this.tiers.requireActiveForGame(tierId, game.key);
       stakeCoins = tier.costCoins;
+      rewardMultiplierBp = tier.rewardMultiplierBp;
       tierId = tier.id;
     }
 
@@ -139,6 +146,7 @@ export class MatchesService {
         mode: dto.mode ?? 'CASUAL',
         stakeCoins,
         tierId,
+        rewardMultiplierBp,
         createdByUserId: userId,
         players: {
           create: [
@@ -1037,8 +1045,12 @@ export class MatchesService {
       });
       if (!match || !match.tierId || match.stakeCoins <= 0) return;
 
-      const tier = await this.tiers.byId(match.tierId);
-      const multBp = tier?.rewardMultiplierBp ?? 10_000;
+      // Reward multiplier: the value snapshotted at match creation wins;
+      // fall back to the live tier for pre-Phase-E rows (then 1.0x).
+      const multBp =
+        match.rewardMultiplierBp ??
+        (await this.tiers.byId(match.tierId))?.rewardMultiplierBp ??
+        10_000;
 
       const winner =
         completion.winnerSeat === null

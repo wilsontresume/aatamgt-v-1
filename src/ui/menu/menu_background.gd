@@ -8,13 +8,30 @@ extends Control
 func _ready() -> void:
 	mouse_filter = Control.MOUSE_FILTER_IGNORE
 	resized.connect(queue_redraw)
+	# Phase E: published home background art draws over the procedural
+	# scene when the content manifest provides one and it has downloaded.
+	if App != null and App.content != null:
+		if not App.content.asset_ready.is_connected(_on_asset_ready):
+			App.content.asset_ready.connect(_on_asset_ready)
+		var _tex := App.content.home_texture()
 	queue_redraw()
+
+
+func _on_asset_ready(_asset_id: String) -> void:
+	if is_inside_tree():
+		queue_redraw()
 
 
 func _draw() -> void:
 	var w := size.x
 	var h := size.y
 	if w < 2.0 or h < 2.0:
+		return
+	var home_tex: Texture2D = null
+	if App != null and App.content != null:
+		home_tex = App.content.home_texture()
+	if home_tex != null:
+		draw_texture_rect(home_tex, Rect2(0, 0, w, h), true)
 		return
 	var horizon := h * 0.52
 

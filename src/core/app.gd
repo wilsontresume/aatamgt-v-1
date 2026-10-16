@@ -52,6 +52,9 @@ var rewards: RewardsService
 ## Workflow Change 2: multiplayer-first entry (tiers, queue, AI fallback).
 var matchmaking: MatchmakingService
 
+## Phase E: published content manifest (assets, board themes, tier art).
+var content: ContentService
+
 ## Currently highlighted game on the main-menu carousel. The PLAY
 ## button opens this game's multiplayer-first entry screen.
 signal selected_game_changed(game_id: StringName)
@@ -84,6 +87,7 @@ func _init() -> void:
 			get_local_setting, save_local_setting, APP_VERSION)
 	rewards = RewardsService.new(auth)
 	matchmaking = MatchmakingService.new(auth)
+	content = ContentService.new(api_client)
 	var saved_game := str(get_local_setting(SELECTED_GAME_SETTING,
 			SELECTED_GAME_KEY, String(selected_game)))
 	if VALID_GAMES.has(StringName(saved_game)):
@@ -100,6 +104,7 @@ func _ready() -> void:
 	auth.signed_out.connect(_on_signed_out)
 	api_client.reachability_changed.connect(_on_reachability)
 	ads.reward_granted.connect(_on_reward_granted)
+	content.start()
 
 
 func _notification(what: int) -> void:

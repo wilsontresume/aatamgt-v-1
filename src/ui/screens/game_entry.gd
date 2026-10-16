@@ -127,12 +127,29 @@ func _build_tier_button(tier: Dictionary) -> Button:
 	name_label.theme_type_variation = "TierName"
 	name_label.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
 	name_label.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	# Phase E: published tier display color/description from the manifest.
+	var display := {}
+	if App != null and App.content != null:
+		display = App.content.tier_display(str(tier.get("id", "")))
+	var tier_color: Variant = display.get("color", null)
+	if tier_color is Color:
+		name_label.add_theme_color_override("font_color", tier_color)
 	vb.add_child(name_label)
 	var art := _TierArt.new()
 	art.tier_label = label
+	art.art_asset_id = str(display.get("art_id", ""))
 	art.custom_minimum_size = Vector2(0, 64)
 	art.mouse_filter = Control.MOUSE_FILTER_IGNORE
 	vb.add_child(art)
+	var description := str(display.get("description", ""))
+	if not description.is_empty():
+		var desc := Label.new()
+		desc.text = description
+		desc.theme_type_variation = "Caption"
+		desc.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+		desc.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
+		desc.mouse_filter = Control.MOUSE_FILTER_IGNORE
+		vb.add_child(desc)
 	if cost == 0:
 		_add_tier_row(vb, "Free play", "")
 	else:
@@ -211,8 +228,30 @@ class _MiniCoin extends Control:
 
 class _TierArt extends Control:
 	var tier_label := "Bronze"
+	var art_asset_id := ""
+
+	func _ready() -> void:
+		if art_asset_id.is_empty() and App != null and App.content != null:
+			var display := App.content.tier_display_by_name(tier_label)
+			art_asset_id = str(display.get("art_id", ""))
+		if App != null and App.content != null \
+				and not App.content.asset_ready.is_connected(_on_asset_ready):
+			App.content.asset_ready.connect(_on_asset_ready)
+		# Trigger a background download when the manifest references art.
+		if App != null and App.content != null and not art_asset_id.is_empty():
+			var _tex := App.content.texture_for(art_asset_id)
+
+	func _on_asset_ready(_asset_id: String) -> void:
+		if is_inside_tree():
+			queue_redraw()
 
 	func _draw() -> void:
+		var art_tex: Texture2D = null
+		if App != null and App.content != null and not art_asset_id.is_empty():
+			art_tex = App.content.texture_for(art_asset_id)
+		if art_tex != null:
+			draw_texture_rect(art_tex, Rect2(Vector2.ZERO, size), true)
+			return
 		var w := size.x
 		var h := size.y
 		var cx := w * 0.5
@@ -265,10 +304,18 @@ func _refresh_tier_detail() -> void:
 		return
 	var cost := int(t.get("costCoins", 0))
 	var reward := int(t.get("rewardCoins", 0))
+	var detail := ""
 	if cost == 0:
-		_tier_detail.text = "Free play · winner keeps bragging rights"
+		detail = "Free play · winner keeps bragging rights"
 	else:
-		_tier_detail.text = "Entry %d coins · winner takes %d coins" % [cost, reward]
+		detail = "Entry %d coins · winner takes %d coins" % [cost, reward]
+	# Phase E: append the published description when the manifest has one.
+	if App != null and App.content != null:
+		var display := App.content.tier_display(_selected_tier)
+		var description := str(display.get("description", ""))
+		if not description.is_empty():
+			detail += "\n" + description
+	_tier_detail.text = detail
 
 
 func _load_tiers() -> void:

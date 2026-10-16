@@ -35,6 +35,10 @@ export const routes: Routes = [
         loadComponent: () => import('./economy/economy').then((m) => m.EconomyPage),
       },
       {
+        path: 'content',
+        loadComponent: () => import('./content/content').then((m) => m.ContentPage),
+      },
+      {
         path: 'audit',
         canActivate: [adminGuard],
         loadComponent: () => import('./audit/audit').then((m) => m.AuditPage),
