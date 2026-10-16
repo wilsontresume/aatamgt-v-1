@@ -1,0 +1,107 @@
+@use '../../theme' as t;
+
+.login-wrap {
+  min-height: 100vh;
+  display: grid;
+  place-items: center;
+  background:
+    radial-gradient(1200px 600px at 20% -10%, #99f6e4 0%, transparent 55%),
+    linear-gradient(160deg, #134e4a 0%, #0f766e 45%, #92400e 120%);
+  padding: 24px;
+}
+
+.login-card {
+  width: min(400px, 100%);
+  background: #fffdf7;
+  border-radius: 16px;
+  padding: 32px;
+  box-shadow: 0 24px 60px rgba(15, 23, 42, 0.35);
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+}
+
+.brand {
+  display: flex;
+  align-items: center;
+  gap: 14px;
+  margin-bottom: 8px;
+
+  h1 {
+    margin: 0;
+    font-size: 1.25rem;
+    color: t.$teal-900;
+  }
+
+  p {
+    margin: 2px 0 0;
+    color: t.$muted;
+    font-size: 0.85rem;
+  }
+}
+
+.brand-mark {
+  width: 44px;
+  height: 44px;
+  border-radius: 12px;
+  background: linear-gradient(145deg, t.$teal-700, t.$teal-900);
+  color: #fffbeb;
+  display: grid;
+  place-items: center;
+  font-weight: 800;
+  font-size: 1.3rem;
+}
+
+label {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  font-size: 0.85rem;
+  font-weight: 600;
+  color: #44403c;
+
+  input {
+    border: 1px solid t.$line;
+    border-radius: 10px;
+    padding: 10px 12px;
+    font-size: 0.95rem;
+    background: #fff;
+
+    &:focus {
+      outline: 2px solid t.$teal-600;
+      outline-offset: 1px;
+    }
+  }
+}
+
+.error {
+  background: #fef2f2;
+  color: t.$danger;
+  border: 1px solid #fecaca;
+  border-radius: 10px;
+  padding: 10px 12px;
+  font-size: 0.875rem;
+}
+
+button.primary {
+  background: linear-gradient(145deg, t.$teal-700, t.$teal-900);
+  color: #fff;
+  border: none;
+  border-radius: 10px;
+  padding: 12px;
+  font-size: 1rem;
+  font-weight: 700;
+  cursor: pointer;
+
+  &:disabled {
+    opacity: 0.6;
+    cursor: default;
+  }
+}
+
+.hint {
+  margin: 0;
+  color: t.$muted;
+  font-size: 0.78rem;
+  line-height: 1.4;
+}

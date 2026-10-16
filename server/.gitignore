@@ -8,3 +8,5 @@ coverage/
 
 # Local development TLS material (self-signed, never commit)
 dev-certs/
+*.db
+*.sqlite

@@ -1,0 +1,45 @@
+<div class="login-wrap">
+  <form class="login-card" (ngSubmit)="submit()">
+    <div class="brand">
+      <span class="brand-mark">A</span>
+      <div>
+        <h1>AATAMGT Admin</h1>
+        <p>Operations console</p>
+      </div>
+    </div>
+
+    <label>
+      Username
+      <input
+        name="username"
+        [(ngModel)]="username"
+        autocomplete="username"
+        placeholder="admin"
+      />
+    </label>
+
+    <label>
+      Password
+      <input
+        name="password"
+        type="password"
+        [(ngModel)]="password"
+        autocomplete="current-password"
+        placeholder="••••••••"
+      />
+    </label>
+
+    @if (error()) {
+      <div class="error" role="alert">{{ error() }}</div>
+    }
+
+    <button type="submit" class="primary" [disabled]="busy()">
+      {{ busy() ? 'Signing in…' : 'Sign in' }}
+    </button>
+
+    <p class="hint">
+      Staff accounts only (ADMIN / MODERATOR). Player accounts cannot access
+      this console.
+    </p>
+  </form>
+</div>

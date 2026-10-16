@@ -1,0 +1,27 @@
+<header class="topbar">
+  <div class="brand">
+    <span class="mark">A</span>
+    <div class="titles">
+      <strong>AATAMGT Admin</strong>
+      <span>Operations console</span>
+    </div>
+  </div>
+
+  <nav>
+    <a routerLink="/dashboard" class="nav-link">Dashboard</a>
+  </nav>
+
+  <div class="session">
+    <div class="who">
+      <span class="username">{{ auth.user?.username }}</span>
+      <span class="role" [class.admin]="auth.user?.role === 'ADMIN'">
+        {{ auth.user?.role }}
+      </span>
+    </div>
+    <button class="logout" (click)="logout()">Sign out</button>
+  </div>
+</header>
+
+<main class="content">
+  <router-outlet />
+</main>

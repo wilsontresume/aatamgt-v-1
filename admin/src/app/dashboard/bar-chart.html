@@ -1,0 +1,16 @@
+<div class="chart" role="img" aria-label="Daily activity chart">
+  @for (row of rows; track row.label) {
+    <div class="col">
+      <div class="value" [title]="row.value + ' ' + unit">{{ row.value | number }}</div>
+      <div class="track">
+        <div
+          class="bar"
+          [class.zero]="row.value === 0"
+          [style.height.%]="height(row)"
+          [title]="row.label + ': ' + row.value"
+        ></div>
+      </div>
+      <div class="label">{{ row.label }}</div>
+    </div>
+  }
+</div>

@@ -14,3 +14,6 @@ export_credentials.cfg
 .mono/
 data_*/
 mono_crash.*.json
+
+# Local TLS dev certs (never commit private keys)
+dev-certs/

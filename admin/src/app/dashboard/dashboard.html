@@ -1,0 +1,226 @@
+<section class="page-head">
+  <div>
+    <h1>Dashboard</h1>
+    <p class="sub">
+      Real-time operations overview — server data only, no synthetic numbers.
+    </p>
+  </div>
+  <button class="ghost" (click)="load()" [disabled]="state() === 'loading'">
+    Refresh
+  </button>
+</section>
+
+<form class="filters" (ngSubmit)="load()">
+  <label>
+    From
+    <input type="date" name="from" [(ngModel)]="from" />
+  </label>
+  <label>
+    To
+    <input type="date" name="to" [(ngModel)]="to" />
+  </label>
+  <label>
+    Game
+    <select name="gameKey" [(ngModel)]="gameKey">
+      <option value="">All games</option>
+      @for (game of games(); track game.key) {
+        <option [value]="game.key">{{ game.name }}</option>
+      }
+    </select>
+  </label>
+  <div class="filter-actions">
+    <button type="submit" class="primary">Apply</button>
+    <button type="button" class="ghost" (click)="resetFilters()">Reset</button>
+  </div>
+  <span class="range-note">
+    {{ rangeDays }} day{{ rangeDays === 1 ? '' : 's' }}
+    @if (showDefaultRange) {
+      <em>(default)</em>
+    }
+  </span>
+</form>
+
+@if (state() === 'loading') {
+  <div class="panel state" role="status">
+    <div class="spinner"></div>
+    <p>Loading dashboard…</p>
+  </div>
+} @else if (state() === 'error') {
+  <div class="panel state error" role="alert">
+    <h2>Could not load the dashboard</h2>
+    <p>{{ errorMessage() }}</p>
+    <button class="primary" (click)="load()">Retry</button>
+  </div>
+} @else {
+  @if (isEmptyRange) {
+    <div class="panel empty-note">
+      No activity in the selected range. Totals below still reflect the whole
+      platform.
+    </div>
+  }
+
+  <div class="kpis">
+    <div class="kpi">
+      <span class="k">Total users</span>
+      <span class="v">{{ fmt(data()!.users.total) }}</span>
+      <span class="s">{{ fmt(data()!.users.guests) }} guests</span>
+    </div>
+    <div class="kpi">
+      <span class="k">Registered in range</span>
+      <span class="v">{{ fmt(data()!.users.registeredInRange) }}</span>
+      <span class="s">{{ fmt(data()!.users.active) }} active accounts</span>
+    </div>
+    <div class="kpi">
+      <span class="k">Matches in range</span>
+      <span class="v">{{ fmt(data()!.matches.totalInRange) }}</span>
+      <span class="s">
+        {{ fmt(data()!.matches.humanVsHuman) }} HvH ·
+        {{ fmt(data()!.matches.humanVsAi) }} HvAI
+      </span>
+    </div>
+    <div class="kpi">
+      <span class="k">Live matches</span>
+      <span class="v">{{ fmt(data()!.matches.activeNow) }}</span>
+      <span class="s">{{ fmt(data()!.matches.pendingNow) }} pending</span>
+    </div>
+    <div class="kpi">
+      <span class="k">Coins in circulation</span>
+      <span class="v">{{ fmt(data()!.economy.coinsCirculation) }}</span>
+      <span class="s">{{ fmt(data()!.economy.wallets) }} coin wallets</span>
+    </div>
+    <div class="kpi">
+      <span class="k">Issued / spent (range)</span>
+      <span class="v">
+        {{ fmt(data()!.economy.issuedInRange) }} / {{ fmt(data()!.economy.spentInRange) }}
+      </span>
+      <span class="s">{{ fmt(data()!.economy.transactionsInRange) }} transactions</span>
+    </div>
+  </div>
+
+  <div class="grid">
+    <div class="panel">
+      <h2>Registrations per day</h2>
+      <app-bar-chart [rows]="registrationRows()" unit="users" />
+    </div>
+
+    <div class="panel">
+      <h2>Coins granted per day</h2>
+      <app-bar-chart [rows]="grantRows()" unit="coins" />
+    </div>
+
+    <div class="panel">
+      <h2>Match status</h2>
+      <table>
+        <thead>
+          <tr><th>Status</th><th class="num">Matches</th></tr>
+        </thead>
+        <tbody>
+          @for (row of statusRows(); track row.status) {
+            <tr>
+              <td>{{ row.status }}</td>
+              <td class="num">{{ fmt(row.count) }}</td>
+            </tr>
+          }
+        </tbody>
+      </table>
+    </div>
+
+    <div class="panel">
+      <h2>Matches by game</h2>
+      @if (data()!.matches.byGame.length === 0) {
+        <p class="muted">No matches in this range.</p>
+      } @else {
+        <table>
+          <thead>
+            <tr><th>Game</th><th>Key</th><th class="num">Matches</th></tr>
+          </thead>
+          <tbody>
+            @for (game of data()!.matches.byGame; track game.gameKey) {
+              <tr>
+                <td>{{ game.name }}</td>
+                <td class="mono">{{ game.gameKey }}</td>
+                <td class="num">{{ fmt(game.matches) }}</td>
+              </tr>
+            }
+          </tbody>
+        </table>
+      }
+    </div>
+
+    <div class="panel">
+      <h2>Ledger by type</h2>
+      <table>
+        <thead>
+          <tr><th>Type</th><th class="num">Rows</th><th class="num">Net amount</th></tr>
+        </thead>
+        <tbody>
+          @for (row of data()!.economy.byType; track row.type) {
+            <tr>
+              <td class="mono">{{ row.type }}</td>
+              <td class="num">{{ fmt(row.count) }}</td>
+              <td class="num" [class.positive]="row.amount > 0" [class.negative]="row.amount < 0">
+                {{ signed(row.amount) }}
+              </td>
+            </tr>
+          } @empty {
+            <tr><td colspan="3" class="muted">No ledger activity in range.</td></tr>
+          }
+        </tbody>
+      </table>
+    </div>
+
+    <div class="panel">
+      <h2>Latest registrations</h2>
+      <table>
+        <thead>
+          <tr><th>User</th><th>Type</th><th>When (UTC)</th></tr>
+        </thead>
+        <tbody>
+          @for (user of data()!.recent.registrations; track user.id) {
+            <tr>
+              <td>{{ user.username }}</td>
+              <td>{{ user.isGuest ? 'Guest' : 'Account' }}</td>
+              <td class="mono">{{ user.createdAt | date: 'yyyy-MM-dd HH:mm' }}</td>
+            </tr>
+          } @empty {
+            <tr><td colspan="3" class="muted">No users yet.</td></tr>
+          }
+        </tbody>
+      </table>
+    </div>
+
+    <div class="panel wide">
+      <h2>Recent admin actions</h2>
+      @if (data()!.recent.audit === null) {
+        <p class="muted">Audit history is visible to administrators only.</p>
+      } @else {
+        <table>
+          <thead>
+            <tr><th>Actor</th><th>Action</th><th>Target</th><th>When (UTC)</th></tr>
+          </thead>
+          <tbody>
+            @for (row of data()!.recent.audit; track row.id) {
+              <tr>
+                <td>{{ row.actor?.username ?? 'system' }}</td>
+                <td class="mono">{{ row.action }}</td>
+                <td class="mono">
+                  {{ row.targetType ?? '—' }}{{ row.targetId ? ' · ' + row.targetId : '' }}
+                </td>
+                <td class="mono">{{ row.createdAt | date: 'yyyy-MM-dd HH:mm' }}</td>
+              </tr>
+            } @empty {
+              <tr><td colspan="4" class="muted">No admin actions recorded yet.</td></tr>
+            }
+          </tbody>
+        </table>
+      }
+    </div>
+  </div>
+
+  <footer class="health">
+    <span>DB {{ data()!.health.dbLatencyMs }} ms</span>
+    <span>Queue {{ data()!.health.queueDepth }}</span>
+    <span>Uptime {{ data()!.health.uptimeSeconds }} s</span>
+    <span class="mono">Server {{ data()!.health.serverTime }}</span>
+  </footer>
+}
