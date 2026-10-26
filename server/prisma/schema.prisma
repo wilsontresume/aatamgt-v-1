@@ -64,9 +64,30 @@ model User {
   matchmakingTickets MatchmakingTicket[]
   moderationNotesWritten  ModerationNote[] @relation("ModerationNoteAuthor")
   moderationNotesReceived ModerationNote[] @relation("ModerationNoteTarget")
+  socialAccounts SocialAccount[]
 
   @@index([status])
   @@index([createdAt])
+}
+
+/// A linked Facebook/Google identity. One row per provider subject; a user
+/// may hold one identity per provider (google + facebook). Linking a social
+/// identity to a guest account upgrades it — the guest keeps its progress
+/// and stops being disposable.
+model SocialAccount {
+  id        String   @id @default(cuid())
+  provider  String   @db.VarChar(16) // "google" | "facebook"
+  subject   String   @db.VarChar(191) // stable provider-side user id
+  email     String?  @db.VarChar(190)
+  name      String?
+  userId    String
+  createdAt DateTime @default(now())
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@unique([provider, subject])
+  @@unique([userId, provider])
+  @@index([userId])
 }
 
 model Profile {

@@ -1,11 +1,11 @@
-import { Body, Controller, Get, HttpCode, Post, UseGuards } from '@nestjs/common';
+import { Body, Controller, Get, Headers, HttpCode, Post, UseGuards } from '@nestjs/common';
 import { Throttle } from '@nestjs/throttler';
 import { AuthService } from './auth.service';
 import { JwtRefreshGuard } from './jwt-refresh.guard';
 import { Public } from '../common/decorators/public.decorator';
 import { CurrentUser, AuthUser } from '../common/decorators/current-user.decorator';
 import { toPublicUser } from '../common/utils/user-view';
-import { LoginDto, RefreshDto, RegisterDto } from './dto/auth.dto';
+import { LoginDto, RefreshDto, RegisterDto, SocialLoginDto } from './dto/auth.dto';
 
 /** Small helper so AUTH_THROTTLE_* env vars actually reach these routes. */
 function authThrottle(fallbackLimit: number) {
@@ -49,6 +49,26 @@ export class AuthController {
   async login(@Body() dto: LoginDto) {
     const { user, tokens } = await this.auth.login(dto);
     return { user: toPublicUser(user), ...tokens };
+  }
+
+  /**
+   * Social sign-in (Google / Facebook).
+   *
+   * Public: works with no session (creates/logs into a registered account).
+   * If the caller sends a valid guest Bearer token, the social identity is
+   * linked to that same account instead — it is upgraded in place, keeping
+   * progress, coins and matches.
+   */
+  @Public()
+  @Throttle(LOGIN_THROTTLE)
+  @HttpCode(200)
+  @Post('social')
+  async social(
+    @Body() dto: SocialLoginDto,
+    @Headers('authorization') authorization?: string,
+  ) {
+    const { user, tokens, upgraded } = await this.auth.socialLogin(dto, authorization);
+    return { user: toPublicUser(user), upgraded, ...tokens };
   }
 
   @Public()

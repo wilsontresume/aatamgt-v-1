@@ -1,4 +1,4 @@
-import { IsEmail, IsOptional, IsString, Matches, MaxLength, MinLength } from 'class-validator';
+import { IsEmail, IsIn, IsOptional, IsString, Matches, MaxLength, MinLength } from 'class-validator';
 
 const USERNAME_PATTERN = /^[a-zA-Z0-9_]{3,24}$/;
 
@@ -36,4 +36,15 @@ export class RefreshDto {
   @IsString()
   @MinLength(10)
   refreshToken: string;
+}
+
+export class SocialLoginDto {
+  @IsIn(['google', 'facebook'])
+  provider: 'google' | 'facebook';
+
+  /** Provider-issued token: a Google ID token or a Facebook access token. */
+  @IsString()
+  @MinLength(10)
+  @MaxLength(8192)
+  token: string;
 }

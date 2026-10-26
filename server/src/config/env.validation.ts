@@ -165,6 +165,19 @@ export class EnvironmentVariables {
   @IsOptional()
   @IsString()
   GOOGLE_PUBSUB_AUDIENCE?: string;
+
+  /** Optional social login. Empty/unset disables the corresponding provider. */
+  @IsOptional()
+  @IsString()
+  GOOGLE_CLIENT_ID?: string;
+
+  @IsOptional()
+  @IsString()
+  FACEBOOK_APP_ID?: string;
+
+  @IsOptional()
+  @IsString()
+  FACEBOOK_APP_SECRET?: string;
 }
 
 const defaults: Record<string, unknown> = {

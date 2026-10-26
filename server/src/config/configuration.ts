@@ -50,6 +50,13 @@ export interface AppConfig {
     friendRequestPerHour: number;
     friendPendingLimit: number;
   };
+  oauth: {
+    /** Google OAuth client id used to verify Sign-In-With-Google ID tokens. */
+    googleClientId: string;
+    /** Facebook app id + secret used for debug_token verification. */
+    facebookAppId: string;
+    facebookAppSecret: string;
+  };
   cosmetics: {
     /** Development-only cosmetic grants. Always false in production. */
     devGrantsEnabled: boolean;
@@ -137,6 +144,11 @@ export default registerAs<AppConfig>('app', () => {
       challengePendingLimit: num(process.env.CHALLENGE_PENDING_LIMIT, 5),
       friendRequestPerHour: num(process.env.FRIEND_REQUEST_PER_HOUR, 20),
       friendPendingLimit: num(process.env.FRIEND_PENDING_LIMIT, 10),
+    },
+    oauth: {
+      googleClientId: process.env.GOOGLE_CLIENT_ID ?? '',
+      facebookAppId: process.env.FACEBOOK_APP_ID ?? '',
+      facebookAppSecret: process.env.FACEBOOK_APP_SECRET ?? '',
     },
     cosmetics: {
       // Development-only grants: available outside production unless the

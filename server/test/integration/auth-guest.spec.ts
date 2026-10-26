@@ -78,4 +78,23 @@ describe('Guest login (integration)', () => {
     expect(res.status).toBe(401);
     expect(res.body.message).toMatch(/invalid credentials/i);
   });
+
+  it('grants every new guest the registration bonus (free credits)', async () => {
+    const balance = await request(app.getHttpServer())
+      .get(`${apiPrefix(app)}/wallet`)
+      .set(auth(guest1.accessToken));
+    expect(balance.status).toBe(200);
+    expect(balance.body.balance).toBe(1000); // coins.registration_bonus default
+
+    const txs = await request(app.getHttpServer())
+      .get(`${apiPrefix(app)}/wallet/transactions`)
+      .set(auth(guest2.accessToken));
+    expect(txs.status).toBe(200);
+    const bonuses = txs.body.items.filter(
+      (tx: { type: string }) => tx.type === 'REGISTRATION_BONUS',
+    );
+    expect(bonuses).toHaveLength(1);
+    expect(bonuses[0].amount).toBe(1000);
+    expect(bonuses[0].memo).toMatch(/guest/i);
+  });
 });
